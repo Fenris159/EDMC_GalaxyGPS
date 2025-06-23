@@ -342,8 +342,10 @@ class SpanshRouter():
 
     def copy_waypoint(self):
         if sys.platform == "linux" or sys.platform == "linux2":
+            clipboard_cli = os.getenv("EDMC_SPANSH_ROUTER_XCLIP") or "xclip -selection c"
+            clipboard_cli = clipboard_cli.split()
             command = subprocess.Popen(["echo", "-n", self.next_stop], stdout=subprocess.PIPE)
-            subprocess.Popen(["xclip", "-selection", "c"], stdin=command.stdout)
+            subprocess.Popen(clipboard_cli, stdin=command.stdout)
         else:
             self.parent.clipboard_clear()
             self.parent.clipboard_append(self.next_stop)
