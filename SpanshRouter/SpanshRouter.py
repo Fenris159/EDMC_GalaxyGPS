@@ -102,10 +102,10 @@ class SpanshRouter():
 
         row = 0
         self.waypoint_prev_btn.grid(row=row, column=0, columnspan=2, padx=5, pady=10)
-        self.dist_prev_lbl.grid(row=row, column=2, padx=5, pady=10, sticky=tk.W)
+        self.dist_remaining_lbl.grid(row=row, column=2, padx=5, pady=10, sticky=tk.W)
         row += 1
         self.waypoint_btn.grid(row=row, column=0, columnspan=2, padx=5, pady=10)
-        self.dist_remaining_lbl.grid(row=row, column=2, padx=5, pady=10, sticky=tk.W)
+        self.dist_prev_lbl.grid(row=row, column=2, padx=5, pady=10, sticky=tk.W)
         row += 1
         self.waypoint_next_btn.grid(row=row, column=0, columnspan=2, padx=5, pady=10)
         self.dist_next_lbl.grid(row=row, column=2, padx=5, pady=10, sticky=tk.W)
@@ -425,23 +425,23 @@ class SpanshRouter():
         if len(cur) >= 3:
             pv = safe_flt(cur[2])
             if pv is not None:
-                self.dist_prev = f"LY from previous: {pv:.2f}"
+                self.dist_prev = f"Jump LY: {pv:.2f}"
             else:
                 # fallback: try jumps value (index 1)
                 pv2 = safe_flt(cur[1])
                 if pv2 is not None:
-                    self.dist_prev = f"LY from previous (approx): {pv2:.2f}"
+                    self.dist_prev = f"Number of Jumps: {pv2:.2f}"
         else:
             # no explicit distance columns — try best-effort from jumps on prev row
             if self.offset > 0:
                 prev = self.route[self.offset - 1]
                 pj = safe_flt(prev[1])
                 if pj is not None:
-                    self.dist_prev = f"LY from previous (approx): {pj:.2f}"
+                    self.dist_prev = f"Number of Jumps: {pj:.2f}"
                 else:
-                    self.dist_prev = "LY from previous: 0.00"
+                    self.dist_prev = "Start of the journey"
             else:
-                self.dist_prev = "LY from previous: 0.00"
+                self.dist_prev = "Start of the journey"
 
         # --- LY to next ---
         if self.offset < len(self.route) - 1:
@@ -450,15 +450,15 @@ class SpanshRouter():
             if len(nxt) >= 3:
                 nv = safe_flt(nxt[2])
                 if nv is not None:
-                    self.dist_next = f"LY to next: {nv:.2f}"
+                    self.dist_next = f"Next jump LY: {nv:.2f}"
                 else:
                     nv2 = safe_flt(nxt[1])
                     if nv2 is not None:
-                        self.dist_next = f"LY to next (approx): {nv2:.2f}"
+                        self.dist_next = f"Next waypoint jumps: {nv2:.2f}"
             else:
                 nv2 = safe_flt(nxt[1])
                 if nv2 is not None:
-                    self.dist_next = f"LY to next (approx): {nv2:.2f}"
+                    self.dist_next = f"Next waypoint jumps: {nv2:.2f}"
         else:
             self.dist_next = ""
 
@@ -486,7 +486,7 @@ class SpanshRouter():
                 total_rem = total
 
         if total_rem is not None:
-            self.dist_remaining = f"Total LY remaining: {total_rem:.2f}"
+            self.dist_remaining = f"Remaining LY afterwards: {total_rem:.2f}"
         else:
             # final fallback: sum numeric jumps (index 1) as approximate
             s = 0.0
@@ -498,7 +498,7 @@ class SpanshRouter():
                     break
                 s += v
             if ok and s > 0:
-                self.dist_remaining = f"Total LY remaining (approx): {s:.2f}"
+                self.dist_remaining = f"Remaining jumps afterwards: {s:.2f}"
             else:
                 self.dist_remaining = ""
 
