@@ -61,6 +61,11 @@ class SpanshRouter():
         self.restocktritium_header = "Restock Tritium"
         self.refuel_header = "Refuel"
         self.pleaserefuel = False
+        # distance tracking
+        self.dist_next = ""
+        self.dist_prev = ""
+        self.dist_remaining = ""
+        self.last_dist_next = ""
 
     #   -- GUI part --
     def init_gui(self, parent):
@@ -73,6 +78,9 @@ class SpanshRouter():
         self.waypoint_btn = tk.Button(self.frame, text=self.next_wp_label + '\n' + self.next_stop, command=self.copy_waypoint)
         self.waypoint_next_btn = tk.Button(self.frame, text="v", command=self.goto_next_waypoint)
         self.jumpcounttxt_lbl = tk.Label(self.frame, text=self.jumpcountlbl_txt + str(self.jumps_left))
+        self.dist_prev_lbl = tk.Label(self.frame, text="")
+        self.dist_next_lbl = tk.Label(self.frame, text="")
+        self.dist_remaining_lbl = tk.Label(self.frame, text="")
         self.bodies_lbl = tk.Label(self.frame, justify=LEFT, text=self.bodieslbl_txt + self.bodies)
         self.fleetrestock_lbl = tk.Label(self.frame, justify=LEFT, text=self.fleetstocklbl_txt)
         self.refuel_lbl = tk.Label(self.frame, justify=LEFT, text=self.refuellbl_txt)
@@ -93,11 +101,14 @@ class SpanshRouter():
         self.clear_route_btn = tk.Button(self.frame, text="Clear route", command=self.clear_route)
 
         row = 0
-        self.waypoint_prev_btn.grid(row=row, columnspan=2)
+        self.waypoint_prev_btn.grid(row=row, column=0, columnspan=2, padx=5, pady=10)
+        self.dist_remaining_lbl.grid(row=row, column=2, padx=5, pady=10, sticky=tk.W)
         row += 1
-        self.waypoint_btn.grid(row=row, columnspan=2)
+        self.waypoint_btn.grid(row=row, column=0, columnspan=2, padx=5, pady=10)
+        self.dist_prev_lbl.grid(row=row, column=2, padx=5, pady=10, sticky=tk.W)
         row += 1
-        self.waypoint_next_btn.grid(row=row, columnspan=2)
+        self.waypoint_next_btn.grid(row=row, column=0, columnspan=2, padx=5, pady=10)
+        self.dist_next_lbl.grid(row=row, column=2, padx=5, pady=10, sticky=tk.W)
         row += 1
         self.bodies_lbl.grid(row=row, columnspan=2, sticky=tk.W)
         row += 1
@@ -205,11 +216,20 @@ class SpanshRouter():
             self.refuel_lbl.grid_remove()
             self.export_route_btn.grid_remove()
             self.clear_route_btn.grid_remove()
+            self.dist_prev_lbl.grid_remove()
+            self.dist_next_lbl.grid_remove()
+            self.dist_remaining_lbl.grid_remove()
         else:
             self.waypoint_btn["text"] = self.next_wp_label + '\n' + self.next_stop
             if self.jumps_left > 0:
                 self.jumpcounttxt_lbl["text"] = self.jumpcountlbl_txt + str(self.jumps_left)
+                self.dist_prev_lbl["text"] = self.dist_prev
+                self.dist_next_lbl["text"] = self.dist_next
+                self.dist_remaining_lbl["text"] = self.dist_remaining
                 self.jumpcounttxt_lbl.grid()
+                self.dist_prev_lbl.grid()
+                self.dist_next_lbl.grid()
+                self.dist_remaining_lbl.grid()
             else:
                 self.jumpcounttxt_lbl.grid_remove()
 
@@ -330,6 +350,7 @@ class SpanshRouter():
 
             self.next_stop = self.route[self.offset][0]
             self.update_bodies_text()
+            self.compute_distances()
             self.copy_waypoint()
             self.update_gui()
 
@@ -352,41 +373,194 @@ class SpanshRouter():
             self.parent.update()
 
     def goto_next_waypoint(self):
-        if self.offset < self.route.__len__()-1:
+        # allow manual navigation even if offset wasn't set by journal events yet
+        if self.route.__len__() == 0:
+            return
+
+        if not hasattr(self, "offset") or self.offset is None:
+            self.offset = 0
+
+        if self.offset < self.route.__len__() - 1:
             self.update_route(1)
 
     def goto_prev_waypoint(self):
+        # allow manual navigation even if offset wasn't set by journal events yet
+        if self.route.__len__() == 0:
+            return
+
+        if not hasattr(self, "offset") or self.offset is None:
+            self.offset = 0
+
         if self.offset > 0:
             self.update_route(-1)
 
-    def update_route(self, direction=1):
-        if direction > 0:
-            if self.route[self.offset][1] not in [None, "", []]:
-                if not self.galaxy:
-                    self.jumps_left -= int(self.route[self.offset][1])
-                else:
-                    self.jumps_left -= 1
-            self.offset += 1
-        else:
-            self.offset -= 1
-            if self.route[self.offset][1] not in [None, "", []]:
-                if not self.galaxy:
-                    self.jumps_left += int(self.route[self.offset][1])
-                else:
-                    self.jumps_left += 1
+    def compute_distances(self):
+        """Compute LY from prev, to next, and total remaining.
 
+        Correct semantics:
+          - Distance To Arrival (if present) is stored on the target row:
+              route[i][2] == distance from route[i-1] -> route[i]
+          - Distance Remaining (if present) is stored on the current row as route[i][3].
+        This function handles rows that may or may not have the distance columns.
+        """
+        # Reset
+        self.dist_prev = ""
+        self.dist_next = ""
+        self.dist_remaining = ""
+
+        if not (0 <= self.offset < len(self.route)):
+            return
+
+        def safe_flt(x):
+            try:
+                return float(x)
+            except Exception:
+                return None
+
+        cur = self.route[self.offset]
+
+        # --- LY from previous ---
+        # If current row has distance_to_arrival (index >=3? actually index 2 zero-based),
+        # that's the distance from previous -> current.
+        if len(cur) >= 3:
+            pv = safe_flt(cur[2])
+            if pv is not None:
+                self.dist_prev = f"Jump LY: {pv:.2f}"
+            else:
+                # fallback: try jumps value (index 1)
+                pv2 = safe_flt(cur[1])
+                if pv2 is not None:
+                    self.dist_prev = f"Number of Jumps: {pv2:.2f}"
+        else:
+            # no explicit distance columns — try best-effort from jumps on prev row
+            if self.offset > 0:
+                prev = self.route[self.offset - 1]
+                pj = safe_flt(prev[1])
+                if pj is not None:
+                    self.dist_prev = f"Number of Jumps: {pj:.2f}"
+                else:
+                    self.dist_prev = "Start of the journey"
+            else:
+                self.dist_prev = "Start of the journey"
+
+        # --- LY to next ---
+        if self.offset < len(self.route) - 1:
+            nxt = self.route[self.offset + 1]
+            # prefer distance_to_arrival on the NEXT row (distance from current -> next)
+            if len(nxt) >= 3:
+                nv = safe_flt(nxt[2])
+                if nv is not None:
+                    self.dist_next = f"Next jump LY: {nv:.2f}"
+                else:
+                    nv2 = safe_flt(nxt[1])
+                    if nv2 is not None:
+                        self.dist_next = f"Next waypoint jumps: {nv2:.2f}"
+            else:
+                nv2 = safe_flt(nxt[1])
+                if nv2 is not None:
+                    self.dist_next = f"Next waypoint jumps: {nv2:.2f}"
+        else:
+            self.dist_next = ""
+
+        # --- Total remaining ---
+        # Prefer exact Distance Remaining at current row (index 3)
+        total_rem = None
+        if len(cur) >= 4:
+            total_rem = safe_flt(cur[3])
+
+        if total_rem is None:
+            # Try summing distance_to_arrival of subsequent rows (index 2)
+            total = 0.0
+            ok = True
+            for r in self.route[self.offset + 1:]:
+                if len(r) >= 3:
+                    v = safe_flt(r[2])
+                    if v is None:
+                        ok = False
+                        break
+                    total += v
+                else:
+                    ok = False
+                    break
+            if ok:
+                total_rem = total
+
+        if total_rem is not None:
+            self.dist_remaining = f"Remaining LY afterwards: {total_rem:.2f}"
+        else:
+            # final fallback: sum numeric jumps (index 1) as approximate
+            s = 0.0
+            ok = True
+            for r in self.route[self.offset + 1:]:
+                v = safe_flt(r[1])
+                if v is None:
+                    ok = False
+                    break
+                s += v
+            if ok and s > 0:
+                self.dist_remaining = f"Remaining jumps afterwards: {s:.2f}"
+            else:
+                self.dist_remaining = ""
+
+    def update_route(self, direction=1):
+        # Guard: no route -> nothing to do
+        if self.route.__len__() == 0:
+            self.next_stop = "No route planned"
+            self.update_gui()
+            return
+
+        # Ensure offset exists and is within bounds
+        if not hasattr(self, "offset") or self.offset is None:
+            self.offset = 0
+
+        # clamp offset into valid range before operating
+        if self.offset < 0:
+            self.offset = 0
+        if self.offset >= self.route.__len__():
+            self.offset = self.route.__len__() - 1
+
+        try:
+            if direction > 0:
+                # subtract jumps for current offset (if present) then advance
+                if self.route[self.offset][1] not in [None, "", []]:
+                    if not self.galaxy:
+                        self.jumps_left -= int(self.route[self.offset][1])
+                    else:
+                        self.jumps_left -= 1
+                # advance but clamp
+                if self.offset < self.route.__len__() - 1:
+                    self.offset += 1
+            else:
+                # move back, but avoid negative indexes
+                if self.offset > 0:
+                    self.offset -= 1
+                    if self.route[self.offset][1] not in [None, "", []]:
+                        if not self.galaxy:
+                            self.jumps_left += int(self.route[self.offset][1])
+                        else:
+                            self.jumps_left += 1
+        except Exception:
+            # If something odd in route contents, try to recover by resetting offset to 0
+            exc_type, exc_value, exc_traceback = sys.exc_info()
+            lines = traceback.format_exception(exc_type, exc_value, exc_traceback)
+            logger.warning(''.join('!! ' + line for line in lines))
+            self.offset = max(0, min(self.offset, self.route.__len__()-1))
+
+        # Now update next_stop and GUI according to new offset
         if self.offset >= self.route.__len__():
             self.next_stop = "End of the road!"
             self.update_gui()
         else:
             self.next_stop = self.route[self.offset][0]
             self.update_bodies_text()
+            self.compute_distances()
 
             if self.galaxy:
                 self.pleaserefuel = self.route[self.offset][1] == "Yes"
 
             self.update_gui()
             self.copy_waypoint()
+
         self.save_offset()
 
     def goto_changelog_page(self):
@@ -457,7 +631,30 @@ class SpanshRouter():
             fleetcarrierimportheader = "System Name,Distance,Distance Remaining,Tritium in tank,Tritium in market,Fuel Used,Icy Ring,Pristine,Restock Tritium"
             galaxyimportheader = "System Name,Distance,Distance Remaining,Fuel Left,Fuel Used,Refuel,Neutron Star"
 
-            if (headerline == internalbasicheader1) or (headerline == internalbasicheader2) or (headerline == neutronimportheader):
+            # Handle plain CSVs (two variants) and the neutron-import format separately.
+            if headerline == neutronimportheader:
+                # CSV has: System Name,Distance To Arrival,Distance Remaining,Neutron Star,Jumps
+                for row in route_reader:
+                    if row not in (None, "", []):
+                        # Keep index 1 as "jumps" for compatibility with existing code,
+                        # but also store distance_to_arrival and distance_remaining at indexes 2 and 3.
+                        jumps = row.get(self.jumps_header, "")
+                        dist_to_arrival = row.get("Distance To Arrival", "")
+                        dist_remaining = row.get("Distance Remaining", "")
+                        self.route.append([
+                            row[self.system_header],
+                            jumps,
+                            dist_to_arrival,
+                            dist_remaining
+                        ])
+                        if jumps:
+                            try:
+                                self.jumps_left += int(jumps)
+                            except:
+                                pass
+
+            elif (headerline == internalbasicheader1) or (headerline == internalbasicheader2):
+                # legacy/simple CSV: System Name [, Jumps]
                 for row in route_reader:
                     if row not in (None, "", []):
                         self.route.append([
@@ -549,6 +746,14 @@ class SpanshRouter():
                             row[self.refuel_header]
                         ])
                         self.jumps_left += 1
+            # After loading route, initialize current waypoint
+            if len(self.route) > 0:
+                self.offset = 0
+                self.next_stop = self.route[0][0]
+                # Compute LY distances immediately (so GUI shows them before pressing arrows)
+                self.compute_distances()
+                self.update_gui()
+
             else:
                 self.show_error("Could not detect file format")
 
@@ -607,6 +812,7 @@ class SpanshRouter():
                             self.show_plot_gui(False)
                             self.offset = 1 if self.route[0][0] == monitor.state['SystemName'] else 0
                             self.next_stop = self.route[self.offset][0]
+                            self.compute_distances()
                             self.copy_waypoint()
                             self.update_gui()
                             self.save_all_route()
