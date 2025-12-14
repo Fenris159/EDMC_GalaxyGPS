@@ -866,8 +866,10 @@ class SpanshRouter():
 
             # Spansh returned immediate error
             if results.status_code != 202:
-                logger.warning(f"Failed to query plotted route from Spansh: "
-                               f"{results.status_code}; text: {results.text}")
+                logger.warning(
+                    f"Failed to query plotted route from Spansh: "
+                    f"{results.status_code}; text: {results.text}"
+                )
 
                 try:
                     failure = json.loads(results.content)
@@ -926,19 +928,39 @@ class SpanshRouter():
                 # Clear previous route silently
                 self.clear_route(show_dialog=False)
 
-                # Fill route
+                # Fill route with distance-aware entries (API plot)
                 for waypoint in route:
-                    self.route.append([waypoint["system"], str(waypoint["jumps"])])
-                    self.jumps_left += waypoint["jumps"]
+                    system = waypoint.get("system", "")
+                    jumps = waypoint.get("jumps", 0)
+
+                    # Map API distance fields to internal format
+                    distance_to_arrival = waypoint.get("distance_jumped", "")
+                    distance_remaining = waypoint.get("distance_left", "")
+
+                    self.route.append([
+                        system,
+                        str(jumps),
+                        distance_to_arrival,
+                        distance_remaining
+                    ])
+
+                    try:
+                        self.jumps_left += int(jumps)
+                    except:
+                        pass
 
                 self.enable_plot_gui(True)
                 self.show_plot_gui(False)
 
                 # Compute offset
-                self.offset = 1 if self.route and self.route[0][0] == monitor.state.get('SystemName') else 0
+                self.offset = (
+                    1
+                    if self.route and self.route[0][0] == monitor.state.get('SystemName')
+                    else 0
+                )
                 self.next_stop = self.route[self.offset][0] if self.route else ""
 
-                # Update GUI
+                # Update GUI and persist
                 self.compute_distances()
                 self.copy_waypoint()
                 self.update_gui()
@@ -946,8 +968,10 @@ class SpanshRouter():
                 return
 
             # Otherwise: Spansh error on final poll
-            logger.warning(f"Failed final route fetch: {route_response.status_code}; "
-                           f"text: {route_response.text}")
+            logger.warning(
+                f"Failed final route fetch: {route_response.status_code}; "
+                f"text: {route_response.text}"
+            )
 
             try:
                 failure = json.loads(results.content)
@@ -970,7 +994,6 @@ class SpanshRouter():
             logger.warning(''.join('!! ' + line for line in lines))
             self.enable_plot_gui(True)
             self.show_error(self.plot_error)
-
 
     def plot_edts(self, filename):
         try:
