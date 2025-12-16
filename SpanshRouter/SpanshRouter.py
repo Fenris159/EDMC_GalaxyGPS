@@ -797,10 +797,7 @@ class SpanshRouter():
                         self.route.append(route_row)
 
                         # galaxy logic: treat each row as one jump for jump counting
-                        try:
-                            self.jumps_left += 1
-                        except:
-                            self.jumps_left += 1
+                        self.jumps_left += 1
 
             else:
                 # Unknown header: try a best-effort basic parse as System Name,Jumps
