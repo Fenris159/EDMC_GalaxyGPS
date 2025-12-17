@@ -66,6 +66,10 @@ class SpanshRouter():
         self.dist_prev = ""
         self.dist_remaining = ""
         self.last_dist_next = ""
+        # Supercharge mode (Spansh neutron routing)
+        # False = normal supercharge (x4)
+        # True  = overcharge supercharge (x6)
+        self.supercharge_overcharge = tk.BooleanVar(value=False)
 
     #   -- GUI part --
     def init_gui(self, parent):
@@ -90,6 +94,8 @@ class SpanshRouter():
         self.source_ac = AutoCompleter(self.frame, "Source System", width=30)
         self.dest_ac = AutoCompleter(self.frame, "Destination System", width=30)
         self.range_entry = PlaceHolder(self.frame, "Range (LY)", width=10)
+        self.supercharge_cb = tk.Checkbutton(self.frame, text="Supercharge", variable=self.supercharge_overcharge)
+
         self.efficiency_slider = tk.Scale(self.frame, from_=1, to=100, orient=tk.HORIZONTAL, label="Efficiency (%)")
         self.efficiency_slider.set(60)
         self.plot_gui_btn = tk.Button(self.frame, text="Plot route", command=self.show_plot_gui)
@@ -120,7 +126,8 @@ class SpanshRouter():
         row += 2
         self.dest_ac.grid(row=row,columnspan=2, pady=(10,0))
         row += 2
-        self.range_entry.grid(row=row, pady=10, sticky=tk.W)
+        self.range_entry.grid(row=row, column=0, pady=10, sticky=tk.W)
+        self.supercharge_cb.grid(row=row, column=1, padx=10, pady=10, sticky=tk.W)
         row += 1
         self.efficiency_slider.grid(row=row, pady=10, columnspan=2, sticky=tk.EW)
         row += 1
@@ -175,6 +182,7 @@ class SpanshRouter():
             self.source_ac.set_text(monitor.state['SystemName'] if monitor.state['SystemName'] is not None else "Source System", monitor.state['SystemName'] is None)
             self.dest_ac.grid()
             self.range_entry.grid()
+            self.supercharge_cb.grid()
             self.efficiency_slider.grid()
             self.plot_route_btn.grid()
             self.cancel_plot.grid()
@@ -191,6 +199,7 @@ class SpanshRouter():
             self.dest_ac.hide_list()
             self.dest_ac.grid_remove()
             self.range_entry.grid_remove()
+            self.supercharge_cb.grid_remove()
             self.efficiency_slider.grid_remove()
             self.plot_gui_btn.grid_remove()
             self.plot_route_btn.grid_remove()
@@ -295,6 +304,8 @@ class SpanshRouter():
             self.plot_route_btn.update_idletasks()
             self.cancel_plot.config(state=tk.NORMAL)
             self.cancel_plot.update_idletasks()
+            self.supercharge_cb.config(state=tk.NORMAL)
+            self.supercharge_cb.update_idletasks()
         else:
             self.source_ac.config(state=tk.DISABLED)
             self.source_ac.update_idletasks()
@@ -308,6 +319,8 @@ class SpanshRouter():
             self.plot_route_btn.update_idletasks()
             self.cancel_plot.config(state=tk.DISABLED)
             self.cancel_plot.update_idletasks()
+            self.supercharge_cb.config(state=tk.DISABLED)
+            self.supercharge_cb.update_idletasks()
 
     #   -- END GUI part --
 
@@ -846,13 +859,19 @@ class SpanshRouter():
 
             # Submit plot request
             try:
+                supercharge_multiplier = 6 if self.supercharge_overcharge.get() else 4
+
                 results = requests.post(
                     job_url,
                     params={
                         "efficiency": efficiency,
                         "range": range_ly,
                         "from": source,
-                        "to": dest
+                        "to": dest,
+                        # Spansh neutron routing:
+                        # 4 = normal supercharge
+                        # 6 = overcharge supercharge
+                        "supercharge_multiplier": supercharge_multiplier
                     },
                     headers={'User-Agent': "EDMC_SpanshRouter 1.0"}
                 )
