@@ -499,7 +499,7 @@ class SpanshRouter():
                 total_rem = total
 
         if total_rem is not None:
-            self.dist_remaining = f"Remaining LY afterwards: {total_rem:.2f}"
+            self.dist_remaining = f"LY afterwards: {total_rem:.2f}"
         else:
             # final fallback: sum numeric jumps (index 1) as approximate
             s = 0.0
@@ -628,85 +628,71 @@ class SpanshRouter():
                 self.clear_route(False)
 
             route_reader = csv.DictReader(csvfile)
-
-            # Get column header names as string (preserve order)
             headerline = ','.join(route_reader.fieldnames) if route_reader.fieldnames else ""
 
-            # Define the different internal formats based on the CSV header row
             internalbasicheader1 = "System Name"
             internalbasicheader2 = "System Name,Jumps"
             internalrichesheader = "System Name,Jumps,Body Name,Body Subtype"
+            internalfleetcarrierheader_with_distances = "System Name,Jumps,Distance To Arrival,Distance Remaining,Restock Tritium"
             internalfleetcarrierheader = "System Name,Jumps,Restock Tritium"
             internalgalaxyheader = "System Name,Refuel"
-            # External/other import formats
             neutronimportheader = "System Name,Distance To Arrival,Distance Remaining,Neutron Star,Jumps"
             road2richesimportheader = "System Name,Body Name,Body Subtype,Is Terraformable,Distance To Arrival,Estimated Scan Value,Estimated Mapping Value,Jumps"
             fleetcarrierimportheader = "System Name,Distance,Distance Remaining,Tritium in tank,Tritium in market,Fuel Used,Icy Ring,Pristine,Restock Tritium"
             galaxyimportheader = "System Name,Distance,Distance Remaining,Fuel Left,Fuel Used,Refuel,Neutron Star"
 
-            # Helper to check and pick distance keys flexibly
             def get_distance_fields(row):
-                # prefer "Distance To Arrival" (neutron style), fall back to "Distance"
                 dist_to_arrival = row.get("Distance To Arrival", "") or row.get("Distance", "")
                 dist_remaining = row.get("Distance Remaining", "") or ""
                 return dist_to_arrival, dist_remaining
 
-            # Handle neutron-import style
+            # --- neutron import ---
             if headerline == neutronimportheader:
-                # CSV has: System Name,Distance To Arrival,Distance Remaining,Neutron Star,Jumps
-                for row in route_reader:
-                    if row not in (None, "", []):
-                        jumps = row.get(self.jumps_header, "")
-                        dist_to_arrival = row.get("Distance To Arrival", "")
-                        dist_remaining = row.get("Distance Remaining", "")
-                        # keep index 1 compatible with existing code (jumps)
-                        self.route.append([
-                            row[self.system_header],
-                            jumps,
-                            dist_to_arrival,
-                            dist_remaining
-                        ])
-                        if jumps:
-                            try:
-                                self.jumps_left += int(jumps)
-                            except:
-                                pass
-
-            # legacy/simple CSV: System Name [, Jumps]
-            elif (headerline == internalbasicheader1) or (headerline == internalbasicheader2):
                 for row in route_reader:
                     if row not in (None, "", []):
                         self.route.append([
                             row[self.system_header],
-                            row.get(self.jumps_header, "")  # Jumps column is optional
-                        ])
-                        if row.get(self.jumps_header):  # Jumps column is optional
-                            try:
-                                self.jumps_left += int(row[self.jumps_header])
-                            except:
-                                pass
-
-            # internal riches format (lists stored as Python-likes)
-            elif headerline == internalrichesheader:
-                self.roadtoriches = True
-
-                for row in route_reader:
-                    if row not in (None, "", []):
-                        bodynames = ast.literal_eval(row[self.bodyname_header])
-                        bodysubtypes = ast.literal_eval(row[self.bodysubtype_header])
-
-                        self.route.append([
-                            row[self.system_header],
-                            row[self.jumps_header],
-                            bodynames,
-                            bodysubtypes
+                            row.get(self.jumps_header, ""),
+                            row.get("Distance To Arrival", ""),
+                            row.get("Distance Remaining", "")
                         ])
                         try:
                             self.jumps_left += int(row[self.jumps_header])
                         except:
                             pass
 
-            # internal fleetcarrier format
+            # --- simple internal ---
+            elif headerline in (internalbasicheader1, internalbasicheader2):
+                for row in route_reader:
+                    if row not in (None, "", []):
+                        self.route.append([
+                            row[self.system_header],
+                            row.get(self.jumps_header, "")
+                        ])
+                        try:
+                            self.jumps_left += int(row.get(self.jumps_header, 0))
+                        except:
+                            pass
+
+            # --- internal fleetcarrier WITH distances (load after restart) ---
+            elif headerline == internalfleetcarrierheader_with_distances:
+                self.fleetcarrier = True
+
+                for row in route_reader:
+                    if row not in (None, "", []):
+                        self.route.append([
+                            row[self.system_header],
+                            row[self.jumps_header],
+                            row.get("Distance To Arrival", ""),
+                            row.get("Distance Remaining", ""),
+                            row.get(self.restocktritium_header, "")
+                        ])
+                        try:
+                            self.jumps_left += int(row[self.jumps_header])
+                        except:
+                            pass
+
+            # --- internal fleetcarrier (legacy, no distances) ---
             elif headerline == internalfleetcarrierheader:
                 self.fleetcarrier = True
 
@@ -722,112 +708,59 @@ class SpanshRouter():
                         except:
                             pass
 
-            # road2riches import
-            elif headerline == road2richesimportheader:
-                self.roadtoriches = True
-
-                bodynames = []
-                bodysubtypes = []
-
-                for row in route_reader:
-                    bodyname = row[self.bodyname_header]
-                    bodysubtype = row[self.bodysubtype_header]
-
-                    # Update the current system with additional bodies from new CSV row
-                    if self.route.__len__() > 0 and row[self.system_header] == self.route[-1][0]:
-                        self.route[-1][2].append(bodyname)
-                        self.route[-1][3].append(bodysubtype)
-                        continue
-
-                    if row not in (None, "", []):
-                        bodynames.append(bodyname)
-                        bodysubtypes.append(bodysubtype)
-
-                        self.route.append([
-                            row[self.system_header],
-                            row[self.jumps_header],
-                            bodynames.copy(),
-                            bodysubtypes.copy()
-                        ])
-                        # Clear bodies for next system
-                        bodynames.clear()
-                        bodysubtypes.clear()
-
-                        try:
-                            self.jumps_left += int(row[self.jumps_header])
-                        except:
-                            pass
-
-            # external fleetcarrier import
+            # --- EXTERNAL fleetcarrier import (WITH LY SUPPORT) ---
             elif headerline == fleetcarrierimportheader:
                 self.fleetcarrier = True
 
                 for row in route_reader:
                     if row not in (None, "", []):
-                        # treat every row as one jump in this import format
+                        dist_to_arrival, dist_remaining = get_distance_fields(row)
+
                         self.route.append([
                             row[self.system_header],
-                            1,  # Jumps is faked as every row is 1 jump
+                            1,  # every row = one carrier jump
+                            dist_to_arrival,
+                            dist_remaining,
                             row.get(self.restocktritium_header, "")
                         ])
                         self.jumps_left += 1
 
-            # galaxy-type imports: handle both the long upstream format
-            # and the simpler internal 'System Name,Refuel' header.
-            # We detect galaxy files by presence of "Refuel" in headerline.
+            # --- galaxy ---
             elif "Refuel" in headerline and self.system_header in headerline:
                 self.galaxy = True
 
                 for row in route_reader:
                     if row not in (None, "", []):
-                        system = row.get(self.system_header, "")
-                        # keep route[i][1] as Refuel so existing galaxy logic keeps working
-                        refuel = row.get(self.refuel_header, "")
-                        # attempt to read distances if present (either "Distance" or "Distance To Arrival")
                         dist_to_arrival, dist_remaining = get_distance_fields(row)
 
-                        # Build route row:
-                        # - always keep [system, refuel] (so update_route / pleaserefuel continue to work)
-                        # - append distances if we have them so compute_distances can display LY
-                        route_row = [system, refuel]
-                        if dist_to_arrival != "" or dist_remaining != "":
+                        route_row = [
+                            row.get(self.system_header, ""),
+                            row.get(self.refuel_header, "")
+                        ]
+
+                        if dist_to_arrival or dist_remaining:
                             route_row.append(dist_to_arrival)
                             route_row.append(dist_remaining)
 
                         self.route.append(route_row)
-
-                        # galaxy logic: treat each row as one jump for jump counting
                         self.jumps_left += 1
 
             else:
-                # Unknown header: try a best-effort basic parse as System Name,Jumps
                 for row in route_reader:
                     if row not in (None, "", []):
-                        # fallback to first two columns if possible
-                        try:
-                            system = row.get(self.system_header, "")
-                            jumps = row.get(self.jumps_header, "")
-                        except Exception:
-                            # as ultimate fallback, iterate values
-                            vals = list(row.values())
-                            system = vals[0] if len(vals) > 0 else ""
-                            jumps = vals[1] if len(vals) > 1 else ""
+                        system = row.get(self.system_header, "")
+                        jumps = row.get(self.jumps_header, "")
                         self.route.append([system, jumps])
-                        if jumps:
-                            try:
-                                self.jumps_left += int(jumps)
-                            except:
-                                pass
+                        try:
+                            self.jumps_left += int(jumps)
+                        except:
+                            pass
 
-            # After loading route, initialize current waypoint
-            if len(self.route) > 0:
+            if self.route:
                 self.offset = 0
                 self.next_stop = self.route[0][0]
-                # Compute LY distances immediately (so GUI shows them before pressing arrows)
                 self.compute_distances()
                 self.update_gui()
-            else:
-                self.show_error("Could not detect file format")
 
     def plot_route(self):
         self.hide_error()
@@ -1089,87 +1022,103 @@ class SpanshRouter():
         self.save_offset()
 
     def save_route(self):
-        """Save current route to disk.
-
-        For galaxy routes we write System Name,Refuel,Distance To Arrival,Distance Remaining
-        so that distances are preserved across restarts and LY display works like for neutron.
-        Other formats keep previous behaviour.
-        """
-        # If no route, try to remove saved files and exit
         if len(self.route) == 0:
             try:
                 os.remove(self.save_route_path)
             except:
-                logger.info("No route to delete")
+                pass
             return
 
         try:
+            # --- Road to riches ---
             if self.roadtoriches:
-                fieldnames = [self.system_header, self.jumps_header, self.bodyname_header, self.bodysubtype_header]
+                fieldnames = [
+                    self.system_header,
+                    self.jumps_header,
+                    self.bodyname_header,
+                    self.bodysubtype_header
+                ]
                 with open(self.save_route_path, 'w', newline='') as csvfile:
                     writer = csv.writer(csvfile)
                     writer.writerow(fieldnames)
-                    for row in self.route:
-                        writer.writerow(row)
+                    writer.writerows(self.route)
                 return
 
+            # --- Fleet carrier (WITH DISTANCES) ---
             if self.fleetcarrier:
-                fieldnames = [self.system_header, self.jumps_header, self.restocktritium_header]
+                fieldnames = [
+                    self.system_header,
+                    self.jumps_header,
+                    "Distance To Arrival",
+                    "Distance Remaining",
+                    self.restocktritium_header
+                ]
                 with open(self.save_route_path, 'w', newline='') as csvfile:
                     writer = csv.writer(csvfile)
                     writer.writerow(fieldnames)
                     for row in self.route:
-                        writer.writerow(row)
+                        writer.writerow([
+                            row[0],
+                            row[1],
+                            row[2] if len(row) > 2 else "",
+                            row[3] if len(row) > 3 else "",
+                            row[4] if len(row) > 4 else ""
+                        ])
                 return
 
+            # --- Galaxy ---
             if self.galaxy:
-                # Save galaxy routes including distances if present:
-                # Write header so reload can restore distances: System Name,Refuel,Distance To Arrival,Distance Remaining
-                fieldnames = [self.system_header, self.refuel_header, "Distance To Arrival", "Distance Remaining"]
+                fieldnames = [
+                    self.system_header,
+                    self.refuel_header,
+                    "Distance To Arrival",
+                    "Distance Remaining"
+                ]
                 with open(self.save_route_path, 'w', newline='') as csvfile:
                     writer = csv.writer(csvfile)
                     writer.writerow(fieldnames)
                     for row in self.route:
-                        # normalize row into 4 columns:
-                        system = row[0] if len(row) > 0 else ""
-                        refuel = row[1] if len(row) > 1 else ""
-                        dist_to_arrival = row[2] if len(row) > 2 else ""
-                        dist_remaining = row[3] if len(row) > 3 else ""
-                        writer.writerow([system, refuel, dist_to_arrival, dist_remaining])
+                        writer.writerow([
+                            row[0],
+                            row[1],
+                            row[2] if len(row) > 2 else "",
+                            row[3] if len(row) > 3 else ""
+                        ])
                 return
 
-            # Generic routes: check if any row contains distance columns (len >= 4)
-            has_distance_columns = any(len(row) >= 4 for row in self.route)
-
-            if has_distance_columns:
-                # Write as neutron-import style:
-                # System Name,Distance To Arrival,Distance Remaining,Neutron Star,Jumps
-                fieldnames = ["System Name", "Distance To Arrival", "Distance Remaining", "Neutron Star", "Jumps"]
+            # --- Generic with distances ---
+            if any(len(r) >= 4 for r in self.route):
+                fieldnames = [
+                    "System Name",
+                    "Distance To Arrival",
+                    "Distance Remaining",
+                    "Neutron Star",
+                    "Jumps"
+                ]
                 with open(self.save_route_path, 'w', newline='') as csvfile:
                     writer = csv.writer(csvfile)
                     writer.writerow(fieldnames)
                     for row in self.route:
-                        # Normalize row into 5 columns; Neutron Star unknown => empty string
-                        system = row[0] if len(row) > 0 else ""
-                        jumps = row[1] if len(row) > 1 else ""
-                        dist_to_arrival = row[2] if len(row) > 2 else ""
-                        dist_remaining = row[3] if len(row) > 3 else ""
-                        neutron_flag = ""  # unknown from our data; leave empty
-                        writer.writerow([system, dist_to_arrival, dist_remaining, neutron_flag, jumps])
+                        writer.writerow([
+                            row[0],
+                            row[2] if len(row) > 2 else "",
+                            row[3] if len(row) > 3 else "",
+                            "",
+                            row[1]
+                        ])
                 return
 
-            # Fallback: simple System, Jumps
-            fieldnames = [self.system_header, self.jumps_header]
+            # --- Fallback ---
             with open(self.save_route_path, 'w', newline='') as csvfile:
                 writer = csv.writer(csvfile)
-                writer.writerow(fieldnames)
+                writer.writerow([self.system_header, self.jumps_header])
                 writer.writerows(self.route)
 
         except Exception:
             exc_type, exc_value, exc_traceback = sys.exc_info()
             lines = traceback.format_exception(exc_type, exc_value, exc_traceback)
             logger.warning(''.join('!! ' + line for line in lines))
-            self.show_error("An error occured while writing the route to disk.")
+
 
     def save_offset(self):
         if self.route.__len__() != 0:
