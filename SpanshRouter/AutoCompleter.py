@@ -6,10 +6,10 @@ import threading
 import traceback
 from tkinter import *
 
-import requests
+import requests  # type: ignore
 from SpanshRouter.PlaceHolder import PlaceHolder
 
-from config import appname
+from config import appname  # type: ignore
 
 # We need a name of plugin dir, not AutoCompleter.py dir
 plugin_name = os.path.basename(os.path.dirname(os.path.dirname(__file__)))
@@ -80,7 +80,7 @@ class AutoCompleter(PlaceHolder):
 
     def changed(self, name=None, index=None, mode=None):
         value = self.var.get()
-        if value.__len__() < 3 and self.lb_up or self.has_selected:
+        if len(value) < 3 and self.lb_up or self.has_selected:
             self.hide_list()
             self.has_selected = False
         else:
@@ -152,7 +152,7 @@ class AutoCompleter(PlaceHolder):
 
     def query_systems(self, inp):
         inp = inp.strip()
-        if inp != self.placeholder and inp.__len__() >= 3:
+        if inp != self.placeholder and len(inp) >= 3:
             url = "https://spansh.co.uk/api/systems?"
             try:
                 results = requests.get(url,
@@ -163,10 +163,8 @@ class AutoCompleter(PlaceHolder):
                 lista = json.loads(results.content)
                 if lista:
                     self.write(lista)
-            except:
-                exc_type, exc_value, exc_traceback = sys.exc_info()
-                lines = traceback.format_exception(exc_type, exc_value, exc_traceback)
-                logger.warning(''.join('!! ' + line for line in lines))
+            except Exception:
+                logger.warning('!! ' + traceback.format_exc(), exc_info=False)
 
     def write(self, lista):
         self.queue.put(lista)
@@ -192,7 +190,7 @@ class AutoCompleter(PlaceHolder):
 
         try:
             self.var.trace_vdelete("w", self.var.traceid)
-        except:
+        except (AttributeError, ValueError):
             pass
         finally:
             self.delete(0, END)

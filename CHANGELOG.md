@@ -2,6 +2,30 @@
 
 All notable changes to this project will be documented in this file.
 
+## 3.2.0
+
+- **Python 3.13 Compatibility**: Updated codebase for full Python 3.13 compatibility
+  - Removed deprecated `sys.platform == "linux2"` check (deprecated since Python 3.3)
+  - Replaced all `__len__()` method calls with `len()` function for better performance
+  - Replaced bare `except:` clauses with specific exception types for better error handling
+  - Modernized exception logging using `traceback.format_exc()` instead of deprecated `sys.exc_info()` pattern
+  - Replaced `io.open()` with standard `open()` function
+  - Fixed bug in updater.py where `os.path.join()` was incorrectly used with binary content
+- **CSV Import Improvements**:
+  - Made CSV column name matching case-insensitive to prevent import issues
+  - CSV files now work regardless of column name capitalization (e.g., "System Name", "system name", "SYSTEM NAME" all work)
+- **Auto-advance Feature**: Automatically advances to next waypoint when importing CSV if already in the first waypoint system
+  - No more manual button clicking needed when starting a route from your current location
+  - Properly updates jump counts when auto-advancing
+- **Fleet Carrier Improvements**:
+  - Fixed fleet carrier restock notification to correctly detect "Restock Tritium" field regardless of CSV format
+  - Now uses last element of route array instead of hardcoded index for better compatibility
+- **Code Quality**:
+  - Added `# type: ignore` comments for EDMC runtime imports to suppress IDE warnings
+  - Centralized GUI layout management for easier maintenance and configuration
+  - Refactored widget visibility logic into single state-based method
+  - Reduced code duplication and improved maintainability
+
 ## 3.1.0
 
 - BE ADVISED: This version only works for EDMC 4.0.0.0 and above. Do not install if you're not currently running the latest EDMC version.

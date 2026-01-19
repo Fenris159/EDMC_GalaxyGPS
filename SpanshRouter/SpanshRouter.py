@@ -1,6 +1,5 @@
 import ast
 import csv
-import io
 import json
 import logging
 import os
@@ -15,9 +14,9 @@ import webbrowser
 from time import sleep
 from tkinter import *
 
-import requests
-from config import appname
-from monitor import monitor
+import requests  # type: ignore
+from config import appname  # type: ignore
+from monitor import monitor  # type: ignore
 
 from . import AutoCompleter, PlaceHolder
 from .updater import SpanshUpdater
@@ -148,65 +147,28 @@ class SpanshRouter():
         # Check if we're having a valid range on the fly
         self.range_entry.var.trace('w', self.check_range)
 
-        self.show_plot_gui(False)
-
-        if not self.route.__len__() > 0:
-            self.waypoint_prev_btn.grid_remove()
-            self.waypoint_btn.grid_remove()
-            self.waypoint_next_btn.grid_remove()
-            self.jumpcounttxt_lbl.grid_remove()
-            self.bodies_lbl.grid_remove()
-            self.fleetrestock_lbl.grid_remove()
-            self.export_route_btn.grid_remove()
-            self.clear_route_btn.grid_remove()
-
+        # Initialize GUI to appropriate state
         self.update_gui()
 
         return self.frame
 
     def show_plot_gui(self, show=True):
+        """Show or hide the route plotting interface"""
         if show:
-            self.waypoint_prev_btn.grid_remove()
-            self.waypoint_btn.grid_remove()
-            self.waypoint_next_btn.grid_remove()
-            self.jumpcounttxt_lbl.grid_remove()
-            self.bodies_lbl.grid_remove()
-            self.fleetrestock_lbl.grid_remove()
-            self.export_route_btn.grid_remove()
-            self.clear_route_btn.grid_remove()
-
-            self.plot_gui_btn.grid_remove()
-            self.csv_route_btn.grid_remove()
-            self.source_ac.grid()
-            # Prefill the "Source" entry with the current system
-            self.source_ac.set_text(monitor.state['SystemName'] if monitor.state['SystemName'] is not None else "Source System", monitor.state['SystemName'] is None)
-            self.dest_ac.grid()
-            self.range_entry.grid()
-            self.supercharge_cb.grid()
-            self.efficiency_slider.grid()
-            self.plot_route_btn.grid()
-            self.cancel_plot.grid()
-
-            self.show_route_gui(False)
-
+            # Hide autocomplete lists before switching
+            self.source_ac.hide_list()
+            self.dest_ac.hide_list()
+            self._update_widget_visibility('plotting')
         else:
-            if len(self.source_ac.var.get()) == 0:
+            # Clear placeholders if empty
+            if not self.source_ac.var.get() or self.source_ac.var.get() == self.source_ac.placeholder:
                 self.source_ac.put_placeholder()
-            if len(self.dest_ac.var.get()) == 0:
+            if not self.dest_ac.var.get() or self.dest_ac.var.get() == self.dest_ac.placeholder:
                 self.dest_ac.put_placeholder()
             self.source_ac.hide_list()
-            self.source_ac.grid_remove()
             self.dest_ac.hide_list()
-            self.dest_ac.grid_remove()
-            self.range_entry.grid_remove()
-            self.supercharge_cb.grid_remove()
-            self.efficiency_slider.grid_remove()
-            self.plot_gui_btn.grid_remove()
-            self.plot_route_btn.grid_remove()
-            self.cancel_plot.grid_remove()
-            self.plot_gui_btn.grid()
-            self.csv_route_btn.grid()
-            self.show_route_gui(True)
+            # Return to appropriate state
+            self.update_gui()
 
     def set_source_ac(self, text):
         self.source_ac.delete(0, tk.END)
@@ -214,74 +176,118 @@ class SpanshRouter():
         self.source_ac.set_default_style()
 
     def show_route_gui(self, show):
+        """Show or hide the route navigation interface (legacy method, now uses centralized approach)"""
         self.hide_error()
-        if not show or not self.route.__len__() > 0:
-            self.waypoint_prev_btn.grid_remove()
-            self.waypoint_btn.grid_remove()
-            self.waypoint_next_btn.grid_remove()
-            self.jumpcounttxt_lbl.grid_remove()
-            self.bodies_lbl.grid_remove()
-            self.fleetrestock_lbl.grid_remove()
-            self.refuel_lbl.grid_remove()
-            self.export_route_btn.grid_remove()
-            self.clear_route_btn.grid_remove()
-            self.dist_prev_lbl.grid_remove()
-            self.dist_next_lbl.grid_remove()
-            self.dist_remaining_lbl.grid_remove()
+        if show and len(self.route) > 0:
+            self._update_widget_visibility('route')
         else:
+            self._update_widget_visibility('empty')
+
+    def _update_widget_visibility(self, state):
+        """
+        Centralized method to manage widget visibility based on UI state.
+        
+        States:
+        - 'plotting': Show route plotting interface
+        - 'route': Show route navigation interface
+        - 'empty': No route loaded, show basic controls
+        """
+        # Define widget groups for each state
+        route_widgets = [
+            self.waypoint_prev_btn, self.waypoint_btn, self.waypoint_next_btn,
+            self.jumpcounttxt_lbl, self.export_route_btn, self.clear_route_btn,
+            self.dist_prev_lbl, self.dist_next_lbl, self.dist_remaining_lbl
+        ]
+        
+        plotting_widgets = [
+            self.source_ac, self.dest_ac, self.range_entry,
+            self.supercharge_cb, self.efficiency_slider,
+            self.plot_route_btn, self.cancel_plot
+        ]
+        
+        basic_controls = [
+            self.plot_gui_btn, self.csv_route_btn
+        ]
+        
+        info_labels = [
+            self.bodies_lbl, self.fleetrestock_lbl, self.refuel_lbl
+        ]
+        
+        # Hide all widgets first
+        for widget in route_widgets + plotting_widgets + basic_controls + info_labels:
+            widget.grid_remove()
+        
+        # Show widgets based on state
+        if state == 'plotting':
+            # Show plotting interface
+            for widget in plotting_widgets:
+                widget.grid()
+            # Prefill source if needed
+            if not self.source_ac.var.get() or self.source_ac.var.get() == self.source_ac.placeholder:
+                current_system = monitor.state.get('SystemName')
+                if current_system:
+                    self.source_ac.set_text(current_system, placeholder_style=False)
+                else:
+                    self.source_ac.put_placeholder()
+        elif state == 'route' and len(self.route) > 0:
+            # Show route navigation interface
+            for widget in route_widgets:
+                widget.grid()
+            
+            # Update waypoint button text
             self.waypoint_btn["text"] = self.next_wp_label + '\n' + self.next_stop
+            
+            # Update distance labels
             if self.jumps_left > 0:
                 self.jumpcounttxt_lbl["text"] = self.jumpcountlbl_txt + str(self.jumps_left)
                 self.dist_prev_lbl["text"] = self.dist_prev
                 self.dist_next_lbl["text"] = self.dist_next
                 self.dist_remaining_lbl["text"] = self.dist_remaining
-                self.jumpcounttxt_lbl.grid()
-                self.dist_prev_lbl.grid()
-                self.dist_next_lbl.grid()
-                self.dist_remaining_lbl.grid()
             else:
                 self.jumpcounttxt_lbl.grid_remove()
-
-            if self.roadtoriches:
-                self.bodies_lbl["text"] = self.bodieslbl_txt + self.bodies
-                self.bodies_lbl.grid()
-            else:
-                self.bodies_lbl.grid_remove()
-
-            self.fleetrestock_lbl.grid_remove()
-            if self.fleetcarrier:
-                if self.offset > 0:
-                    restock = self.route[self.offset - 1][2]
-                    if restock.lower() == "yes":
-                        self.fleetrestock_lbl["text"] = f"At: {self.route[self.offset - 1][0]}\n   {self.fleetstocklbl_txt}" 
-                        self.fleetrestock_lbl.grid()
-
-            if self.galaxy:
-                if self.pleaserefuel:
-                    self.refuel_lbl['text'] = self.refuellbl_txt
-                    self.refuel_lbl.grid()
-                else:
-                    self.refuel_lbl.grid_remove()
-
-            self.waypoint_prev_btn.grid()
-            self.waypoint_btn.grid()
-            self.waypoint_next_btn.grid()
-
+                self.dist_prev_lbl.grid_remove()
+                self.dist_next_lbl.grid_remove()
+                self.dist_remaining_lbl.grid_remove()
+            
+            # Update waypoint button states
             if self.offset == 0:
                 self.waypoint_prev_btn.config(state=tk.DISABLED)
             else:
                 self.waypoint_prev_btn.config(state=tk.NORMAL)
-
-                if self.offset == self.route.__len__()-1:
-                    self.waypoint_next_btn.config(state=tk.DISABLED)
-                else:
-                    self.waypoint_next_btn.config(state=tk.NORMAL)
-
-            self.export_route_btn.grid()
-            self.clear_route_btn.grid()
+            
+            if self.offset == len(self.route) - 1:
+                self.waypoint_next_btn.config(state=tk.DISABLED)
+            else:
+                self.waypoint_next_btn.config(state=tk.NORMAL)
+            
+            # Show conditional info labels
+            if self.roadtoriches:
+                self.bodies_lbl["text"] = self.bodieslbl_txt + self.bodies
+                self.bodies_lbl.grid()
+            
+            if self.fleetcarrier and self.offset > 0:
+                prev_waypoint = self.route[self.offset - 1]
+                if len(prev_waypoint) > 2:
+                    restock = prev_waypoint[-1]
+                    if restock and restock.lower() == "yes":
+                        self.fleetrestock_lbl["text"] = f"At: {prev_waypoint[0]}\n   {self.fleetstocklbl_txt}"
+                        self.fleetrestock_lbl.grid()
+            
+            if self.galaxy and self.pleaserefuel:
+                self.refuel_lbl['text'] = self.refuellbl_txt
+                self.refuel_lbl.grid()
+        
+        # Always show basic controls when not plotting
+        if state != 'plotting':
+            for widget in basic_controls:
+                widget.grid()
 
     def update_gui(self):
-        self.show_route_gui(True)
+        """Update the GUI based on current state"""
+        if len(self.route) > 0:
+            self._update_widget_visibility('route')
+        else:
+            self._update_widget_visibility('empty')
 
     def show_error(self, error):
         self.error_txt.set(error)
@@ -348,7 +354,7 @@ class SpanshRouter():
                 with open(self.offset_file_path, 'r') as offset_fh:
                     self.offset = int(offset_fh.readline())
 
-            except:
+            except (IOError, OSError, ValueError):
                 self.offset = 0
 
             self.jumps_left = 0
@@ -369,13 +375,11 @@ class SpanshRouter():
 
         except IOError:
             logger.info("No previously saved route")
-        except:
-            exc_type, exc_value, exc_traceback = sys.exc_info()
-            lines = traceback.format_exception(exc_type, exc_value, exc_traceback)
-            logger.warning(''.join('!! ' + line for line in lines))
+        except Exception:
+            logger.warning('!! ' + traceback.format_exc(), exc_info=False)
 
     def copy_waypoint(self):
-        if sys.platform == "linux" or sys.platform == "linux2":
+        if sys.platform == "linux":
             clipboard_cli = os.getenv("EDMC_SPANSH_ROUTER_XCLIP") or "xclip -selection c"
             clipboard_cli = clipboard_cli.split()
             command = subprocess.Popen(["echo", "-n", self.next_stop], stdout=subprocess.PIPE)
@@ -387,18 +391,18 @@ class SpanshRouter():
 
     def goto_next_waypoint(self):
         # allow manual navigation even if offset wasn't set by journal events yet
-        if self.route.__len__() == 0:
+        if len(self.route) == 0:
             return
 
         if not hasattr(self, "offset") or self.offset is None:
             self.offset = 0
 
-        if self.offset < self.route.__len__() - 1:
+        if self.offset < len(self.route) - 1:
             self.update_route(1)
 
     def goto_prev_waypoint(self):
         # allow manual navigation even if offset wasn't set by journal events yet
-        if self.route.__len__() == 0:
+        if len(self.route) == 0:
             return
 
         if not hasattr(self, "offset") or self.offset is None:
@@ -517,7 +521,7 @@ class SpanshRouter():
 
     def update_route(self, direction=1):
         # Guard: no route -> nothing to do
-        if self.route.__len__() == 0:
+        if len(self.route) == 0:
             self.next_stop = "No route planned"
             self.update_gui()
             return
@@ -529,8 +533,8 @@ class SpanshRouter():
         # clamp offset into valid range before operating
         if self.offset < 0:
             self.offset = 0
-        if self.offset >= self.route.__len__():
-            self.offset = self.route.__len__() - 1
+        if self.offset >= len(self.route):
+            self.offset = len(self.route) - 1
 
         try:
             if direction > 0:
@@ -541,7 +545,7 @@ class SpanshRouter():
                     else:
                         self.jumps_left -= 1
                 # advance but clamp
-                if self.offset < self.route.__len__() - 1:
+                if self.offset < len(self.route) - 1:
                     self.offset += 1
             else:
                 # move back, but avoid negative indexes
@@ -554,13 +558,11 @@ class SpanshRouter():
                             self.jumps_left += 1
         except Exception:
             # If something odd in route contents, try to recover by resetting offset to 0
-            exc_type, exc_value, exc_traceback = sys.exc_info()
-            lines = traceback.format_exception(exc_type, exc_value, exc_traceback)
-            logger.warning(''.join('!! ' + line for line in lines))
-            self.offset = max(0, min(self.offset, self.route.__len__()-1))
+            logger.warning('!! ' + traceback.format_exc(), exc_info=False)
+            self.offset = max(0, min(self.offset, len(self.route) - 1))
 
         # Now update next_stop and GUI according to new offset
-        if self.offset >= self.route.__len__():
+        if self.offset >= len(self.route):
             self.next_stop = "End of the road!"
             self.update_gui()
         else:
@@ -601,25 +603,41 @@ class SpanshRouter():
                     self.plot_edts(filename)
 
                 if ftype_supported:
-                    self.offset = 0
-                    self.next_stop = self.route[0][0]
+                    # Check if we're already in the first waypoint system
+                    # If so, automatically advance to the next waypoint
+                    current_system = monitor.state.get('SystemName')
+                    if self.route and current_system and self.route[0][0].lower() == current_system.lower():
+                        self.offset = 1 if len(self.route) > 1 else 0
+                        # Update jumps_left to account for skipping the first waypoint
+                        if self.offset > 0 and len(self.route[0]) > 1:
+                            if self.route[0][1] not in [None, "", []]:
+                                if not self.galaxy:
+                                    try:
+                                        self.jumps_left -= int(self.route[0][1])
+                                    except (ValueError, TypeError):
+                                        pass
+                                else:
+                                    self.jumps_left -= 1
+                    else:
+                        self.offset = 0
+                    
+                    self.next_stop = self.route[self.offset][0] if self.route else ""
                     if self.galaxy:
-                        self.pleaserefuel = self.route[0][1] == "Yes"
+                        self.pleaserefuel = self.route[self.offset][1] == "Yes" if self.route and len(self.route[self.offset]) > 1 else False
                     self.update_bodies_text()
+                    self.compute_distances()
                     self.copy_waypoint()
                     self.update_gui()
                     self.save_all_route()
                 else:
                     self.show_error("Unsupported file type")
-            except:
-                exc_type, exc_value, exc_traceback = sys.exc_info()
-                lines = traceback.format_exception(exc_type, exc_value, exc_traceback)
-                logger.warning(''.join('!! ' + line for line in lines))
+            except Exception:
+                logger.warning('!! ' + traceback.format_exc(), exc_info=False)
                 self.enable_plot_gui(True)
                 self.show_error("(1) An error occured while reading the file.")
 
     def plot_csv(self, filename, clear_previous_route=True):
-        with io.open(filename, 'r', encoding='utf-8-sig', newline='') as csvfile:
+        with open(filename, 'r', encoding='utf-8-sig', newline='') as csvfile:
             self.roadtoriches = False
             self.fleetcarrier = False
             self.galaxy = False
@@ -628,7 +646,22 @@ class SpanshRouter():
                 self.clear_route(False)
 
             route_reader = csv.DictReader(csvfile)
-            headerline = ','.join(route_reader.fieldnames) if route_reader.fieldnames else ""
+            fieldnames = route_reader.fieldnames if route_reader.fieldnames else []
+            
+            # Create case-insensitive fieldname mapping
+            fieldname_map = {name.lower(): name for name in fieldnames}
+            
+            def get_field(row, field_name, default=""):
+                """Get field value from row using case-insensitive lookup"""
+                key = fieldname_map.get(field_name.lower(), field_name)
+                return row.get(key, default)
+            
+            def has_field(field_name):
+                """Check if field exists in header (case-insensitive)"""
+                return field_name.lower() in fieldname_map
+            
+            headerline = ','.join(fieldnames) if fieldnames else ""
+            headerline_lower = headerline.lower()
 
             internalbasicheader1 = "System Name"
             internalbasicheader2 = "System Name,Jumps"
@@ -642,74 +675,78 @@ class SpanshRouter():
             galaxyimportheader = "System Name,Distance,Distance Remaining,Fuel Left,Fuel Used,Refuel,Neutron Star"
 
             def get_distance_fields(row):
-                dist_to_arrival = row.get("Distance To Arrival", "") or row.get("Distance", "")
-                dist_remaining = row.get("Distance Remaining", "") or ""
+                dist_to_arrival = get_field(row, "Distance To Arrival", "") or get_field(row, "Distance", "")
+                dist_remaining = get_field(row, "Distance Remaining", "")
                 return dist_to_arrival, dist_remaining
 
             # --- neutron import ---
-            if headerline == neutronimportheader:
+            if headerline_lower == neutronimportheader.lower():
                 for row in route_reader:
                     if row not in (None, "", []):
                         self.route.append([
-                            row[self.system_header],
-                            row.get(self.jumps_header, ""),
-                            row.get("Distance To Arrival", ""),
-                            row.get("Distance Remaining", "")
+                            get_field(row, self.system_header),
+                            get_field(row, self.jumps_header, ""),
+                            get_field(row, "Distance To Arrival", ""),
+                            get_field(row, "Distance Remaining", "")
                         ])
                         try:
-                            self.jumps_left += int(row[self.jumps_header])
-                        except:
+                            jumps_val = get_field(row, self.jumps_header, "0")
+                            self.jumps_left += int(jumps_val)
+                        except (ValueError, TypeError):
                             pass
 
             # --- simple internal ---
-            elif headerline in (internalbasicheader1, internalbasicheader2):
+            elif headerline_lower in (internalbasicheader1.lower(), internalbasicheader2.lower()):
                 for row in route_reader:
                     if row not in (None, "", []):
                         self.route.append([
-                            row[self.system_header],
-                            row.get(self.jumps_header, "")
+                            get_field(row, self.system_header),
+                            get_field(row, self.jumps_header, "")
                         ])
                         try:
-                            self.jumps_left += int(row.get(self.jumps_header, 0))
-                        except:
+                            jumps_val = get_field(row, self.jumps_header, "0")
+                            self.jumps_left += int(jumps_val)
+                        except (ValueError, TypeError):
                             pass
 
             # --- internal fleetcarrier WITH distances (load after restart) ---
-            elif headerline == internalfleetcarrierheader_with_distances:
+            elif headerline_lower == internalfleetcarrierheader_with_distances.lower():
                 self.fleetcarrier = True
 
                 for row in route_reader:
                     if row not in (None, "", []):
                         self.route.append([
-                            row[self.system_header],
-                            row[self.jumps_header],
-                            row.get("Distance To Arrival", ""),
-                            row.get("Distance Remaining", ""),
-                            row.get(self.restocktritium_header, "")
+                            get_field(row, self.system_header),
+                            get_field(row, self.jumps_header),
+                            get_field(row, "Distance To Arrival", ""),
+                            get_field(row, "Distance Remaining", ""),
+                            get_field(row, self.restocktritium_header, "")
                         ])
                         try:
-                            self.jumps_left += int(row[self.jumps_header])
-                        except:
+                            jumps_val = get_field(row, self.jumps_header, "0")
+                            self.jumps_left += int(jumps_val)
+                        except (ValueError, TypeError):
                             pass
 
             # --- internal fleetcarrier (legacy, no distances) ---
-            elif headerline == internalfleetcarrierheader:
+            elif headerline_lower == internalfleetcarrierheader.lower():
                 self.fleetcarrier = True
 
                 for row in route_reader:
                     if row not in (None, "", []):
                         self.route.append([
-                            row[self.system_header],
-                            row[self.jumps_header],
-                            row[self.restocktritium_header]
+                            get_field(row, self.system_header),
+                            get_field(row, self.jumps_header),
+                            get_field(row, self.restocktritium_header)
                         ])
                         try:
-                            self.jumps_left += int(row[self.jumps_header])
-                        except:
+                            jumps_val = get_field(row, self.jumps_header, "0")
+                            self.jumps_left += int(jumps_val)
+                        except (ValueError, TypeError):
                             pass
 
             # --- EXTERNAL fleetcarrier import (WITH LY SUPPORT) ---
-            elif headerline == fleetcarrierimportheader:
+            elif headerline_lower == fleetcarrierimportheader.lower():
                 self.fleetcarrier = True
 
                 for row in route_reader:
@@ -717,16 +754,16 @@ class SpanshRouter():
                         dist_to_arrival, dist_remaining = get_distance_fields(row)
 
                         self.route.append([
-                            row[self.system_header],
+                            get_field(row, self.system_header),
                             1,  # every row = one carrier jump
                             dist_to_arrival,
                             dist_remaining,
-                            row.get(self.restocktritium_header, "")
+                            get_field(row, self.restocktritium_header, "")
                         ])
                         self.jumps_left += 1
 
             # --- galaxy ---
-            elif "Refuel" in headerline and self.system_header in headerline:
+            elif has_field("Refuel") and has_field(self.system_header):
                 self.galaxy = True
 
                 for row in route_reader:
@@ -734,8 +771,8 @@ class SpanshRouter():
                         dist_to_arrival, dist_remaining = get_distance_fields(row)
 
                         route_row = [
-                            row.get(self.system_header, ""),
-                            row.get(self.refuel_header, "")
+                            get_field(row, self.system_header, ""),
+                            get_field(row, self.refuel_header, "")
                         ]
 
                         if dist_to_arrival or dist_remaining:
@@ -748,17 +785,34 @@ class SpanshRouter():
             else:
                 for row in route_reader:
                     if row not in (None, "", []):
-                        system = row.get(self.system_header, "")
-                        jumps = row.get(self.jumps_header, "")
+                        system = get_field(row, self.system_header, "")
+                        jumps = get_field(row, self.jumps_header, "")
                         self.route.append([system, jumps])
                         try:
-                            self.jumps_left += int(jumps)
-                        except:
+                            self.jumps_left += int(jumps) if jumps else 0
+                        except (ValueError, TypeError):
                             pass
 
             if self.route:
-                self.offset = 0
-                self.next_stop = self.route[0][0]
+                # Check if we're already in the first waypoint system
+                # If so, automatically advance to the next waypoint
+                current_system = monitor.state.get('SystemName')
+                if current_system and self.route[0][0].lower() == current_system.lower():
+                    self.offset = 1 if len(self.route) > 1 else 0
+                    # Update jumps_left to account for skipping the first waypoint
+                    if self.offset > 0 and len(self.route[0]) > 1:
+                        if self.route[0][1] not in [None, "", []]:
+                            if not self.galaxy:
+                                try:
+                                    self.jumps_left -= int(self.route[0][1])
+                                except (ValueError, TypeError):
+                                    pass
+                            else:
+                                self.jumps_left -= 1
+                else:
+                    self.offset = 0
+                
+                self.next_stop = self.route[self.offset][0]
                 self.compute_distances()
                 self.update_gui()
 
@@ -822,7 +876,7 @@ class SpanshRouter():
 
                 try:
                     failure = json.loads(results.content)
-                except:
+                except (json.JSONDecodeError, ValueError):
                     failure = {}
 
                 if results.status_code == 400 and "error" in failure:
@@ -847,7 +901,7 @@ class SpanshRouter():
 
                 try:
                     route_response = requests.get(results_url, timeout=5)
-                except:
+                except (requests.RequestException, requests.Timeout):
                     route_response = None
                     break
 
@@ -895,16 +949,17 @@ class SpanshRouter():
 
                     try:
                         self.jumps_left += int(jumps)
-                    except:
+                    except (ValueError, TypeError):
                         pass
 
                 self.enable_plot_gui(True)
                 self.show_plot_gui(False)
 
                 # Compute offset
+                current_system = monitor.state.get('SystemName')
                 self.offset = (
                     1
-                    if self.route and self.route[0][0] == monitor.state.get('SystemName')
+                    if self.route and current_system and self.route[0][0].lower() == current_system.lower()
                     else 0
                 )
                 self.next_stop = self.route[self.offset][0] if self.route else ""
@@ -924,7 +979,7 @@ class SpanshRouter():
 
             try:
                 failure = json.loads(results.content)
-            except:
+            except (json.JSONDecodeError, ValueError):
                 failure = {}
 
             self.enable_plot_gui(True)
@@ -938,9 +993,7 @@ class SpanshRouter():
                 self.show_error(self.plot_error)
 
         except Exception:
-            exc_type, exc_value, exc_traceback = sys.exc_info()
-            lines = traceback.format_exception(exc_type, exc_value, exc_traceback)
-            logger.warning(''.join('!! ' + line for line in lines))
+            logger.warning('!! ' + traceback.format_exc(), exc_info=False)
             self.enable_plot_gui(True)
             self.show_error(self.plot_error)
 
@@ -964,15 +1017,13 @@ class SpanshRouter():
                                     self.jumps_left += jumps
                             else:
                                 self.route.append([system.strip(), jumps])
-        except:
-            exc_type, exc_value, exc_traceback = sys.exc_info()
-            lines = traceback.format_exception(exc_type, exc_value, exc_traceback)
-            logger.warning(''.join('!! ' + line for line in lines))
+        except Exception:
+            logger.warning('!! ' + traceback.format_exc(), exc_info=False)
             self.enable_plot_gui(True)
             self.show_error("(2) An error occured while reading the file.")
 
     def export_route(self):
-        if self.route.__len__() == 0:
+        if len(self.route) == 0:
             logger.info("No route to export")
             return
 
@@ -989,10 +1040,8 @@ class SpanshRouter():
                 with open(filename, 'w') as csvfile:
                     for row in self.route:
                         csvfile.write(f"{route_name},{row[0]}\n")
-            except:
-                exc_type, exc_value, exc_traceback = sys.exc_info()
-                lines = traceback.format_exception(exc_type, exc_value, exc_traceback)
-                #logger.error(''.join('!! ' + line for line in lines))
+            except Exception:
+                logger.warning('!! ' + traceback.format_exc(), exc_info=False)
                 self.show_error("An error occured while writing the file.")
 
     def clear_route(self, show_dialog=True):
@@ -1008,11 +1057,11 @@ class SpanshRouter():
             self.galaxy = False
             try:
                 os.remove(self.save_route_path)
-            except:
+            except (IOError, OSError):
                 logger.info("No route to delete")
             try:
                 os.remove(self.offset_file_path)
-            except:
+            except (IOError, OSError):
                 logger.info("No offset file to delete")
 
             self.update_gui()
@@ -1025,7 +1074,7 @@ class SpanshRouter():
         if len(self.route) == 0:
             try:
                 os.remove(self.save_route_path)
-            except:
+            except (IOError, OSError):
                 pass
             return
 
@@ -1115,19 +1164,17 @@ class SpanshRouter():
                 writer.writerows(self.route)
 
         except Exception:
-            exc_type, exc_value, exc_traceback = sys.exc_info()
-            lines = traceback.format_exception(exc_type, exc_value, exc_traceback)
-            logger.warning(''.join('!! ' + line for line in lines))
+            logger.warning('!! ' + traceback.format_exc(), exc_info=False)
 
 
     def save_offset(self):
-        if self.route.__len__() != 0:
+        if len(self.route) != 0:
             with open(self.offset_file_path, 'w') as offset_fh:
                 offset_fh.write(str(self.offset))
         else:
             try:
                 os.remove(self.offset_file_path)
-            except:
+            except (IOError, OSError):
                 logger.info("No offset to delete")
 
     def update_bodies_text(self):
@@ -1192,10 +1239,8 @@ class SpanshRouter():
                     if (filename != "load.py"
                     and (filename.endswith(".py") or filename.endswith(".pyc") or filename.endswith(".pyo"))):
                         os.remove(os.path.join(self.plugin_dir, filename))
-        except:
-                exc_type, exc_value, exc_traceback = sys.exc_info()
-                lines = traceback.format_exception(exc_type, exc_value, exc_traceback)
-                logger.warning(''.join('!! ' + line for line in lines))
+        except Exception:
+                logger.warning('!! ' + traceback.format_exc(), exc_info=False)
 
     def check_for_update(self):
         return  # Autoupdates is disabled
@@ -1210,10 +1255,8 @@ class SpanshRouter():
 
             else:
                 logger.warning(f"Could not query latest SpanshRouter version, code: {str(response.status_code)}; text: {response.text}")
-        except:
-            exc_type, exc_value, exc_traceback = sys.exc_info()
-            lines = traceback.format_exception(exc_type, exc_value, exc_traceback)
-            logger.warning(''.join('!! ' + line for line in lines))
+        except Exception:
+            logger.warning('!! ' + traceback.format_exc(), exc_info=False)
 
     def install_update(self):
         self.spansh_updater.install()

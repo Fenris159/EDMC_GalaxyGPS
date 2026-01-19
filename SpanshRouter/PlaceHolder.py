@@ -1,6 +1,6 @@
 from tkinter import Entry, END, StringVar
 
-from config import config
+from config import config  # type: ignore
 
 
 class PlaceHolder(Entry):

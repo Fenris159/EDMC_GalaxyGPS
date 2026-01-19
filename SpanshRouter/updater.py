@@ -5,9 +5,9 @@ import sys
 import traceback
 import zipfile
 
-import requests
+import requests  # type: ignore
 
-from config import appname
+from config import appname  # type: ignore
 
 # We need a name of plugin dir, not SpanshRouter.py dir
 plugin_name = os.path.basename(os.path.dirname(os.path.dirname(__file__)))
@@ -31,15 +31,13 @@ class SpanshUpdater():
             if r.status_code == 200:
                 with open(self.zip_path, 'wb') as f:
                     logger.info(f"Downloading SpanshRouter to {self.zip_path}")
-                    f.write(os.path.join(r.content))
+                    f.write(r.content)
                 self.zip_downloaded = True
             else:
                 logger.warning("Failed to fetch SpanchRouter update. Status code: " + str(r.status_code))
                 self.zip_downloaded = False
-        except:
-            exc_type, exc_value, exc_traceback = sys.exc_info()
-            lines = traceback.format_exception(exc_type, exc_value, exc_traceback)
-            logger.warning(''.join('!! ' + line for line in lines))
+        except Exception:
+            logger.warning('!! ' + traceback.format_exc(), exc_info=False)
             self.zip_downloaded = False
         finally:
             return self.zip_downloaded
@@ -51,10 +49,8 @@ class SpanshUpdater():
                     zip_ref.extractall(self.plugin_dir)
 
                 os.remove(self.zip_path)
-            except:
-                exc_type, exc_value, exc_traceback = sys.exc_info()
-                lines = traceback.format_exception(exc_type, exc_value, exc_traceback)
-                logger.warning(''.join('!! ' + line for line in lines))
+            except Exception:
+                logger.warning('!! ' + traceback.format_exc(), exc_info=False)
         else:
             logger.warning("Error when downloading the latest SpanshRouter update")
 
@@ -69,7 +65,5 @@ class SpanshUpdater():
                 changelogs = "\n".join(changelogs.splitlines())
                 return changelogs
 
-        except:
-            exc_type, exc_value, exc_traceback = sys.exc_info()
-            lines = traceback.format_exception(exc_type, exc_value, exc_traceback)
-            logger.warning(''.join('!! ' + line for line in lines))
+        except Exception:
+            logger.warning('!! ' + traceback.format_exc(), exc_info=False)
