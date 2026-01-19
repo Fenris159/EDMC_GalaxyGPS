@@ -1,9 +1,8 @@
 # EDMC_SpanshRouter
 ## Note on norohind's fork
 This is fork where I try to maintain working version of SpanshRouter
-plugin for personal use with the latest version of EDMarketConnector.  
-I'm not trying to maintain README.md, CHANGELOG.md and auto-update system
-of the plugin, at least now.
+plugin for public use with the latest version of EDMarketConnector. 
+I have expanded it's functionality and corrected some issues for operating Fleet Carriers
 
 This plugin's purpose is to automatically copy to your clipboard the next waypoint on a route you planned using [Spansh](https://www.spansh.co.uk/plotter).
 
@@ -81,9 +80,4 @@ Fly dangerous! o7
 
 ## Known Issues
 
-At the moment, plotting a route while the game is running, and which begins from the system you're currently in, doesn't update your "next waypoint". If you're in that situation, a couple of solutions are available:
-
-- Using the **down** button below the **Next waypoint**
-- Performing a FSS Discovery Scan
-- Go in our out of Supercruise
-- Logging back in and out while EDMC is already running.
+TBD
