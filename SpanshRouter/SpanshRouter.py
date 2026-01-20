@@ -97,152 +97,66 @@ class SpanshRouter():
     #   -- GUI part --
     def init_gui(self, parent):
         self.parent = parent
-        logger.info(f"[init_gui] Called with parent: {parent}, _gui_initialized: {self._gui_initialized}")
         
-        # FIRST: Check if GUI has already been initialized and widgets exist
+        # Check if GUI has already been initialized and widgets still exist
         if self._gui_initialized:
-            logger.info(f"[init_gui] GUI marked as initialized, checking if widgets still exist")
             if hasattr(self, 'frame') and self.frame:
                 try:
                     if self.frame.winfo_exists():
-                        logger.info(f"[init_gui] Frame exists and is valid")
                         # Check if fleet carrier widgets still exist
                         if (hasattr(self, 'fleet_carrier_status_label') and 
                             self.fleet_carrier_status_label):
                             try:
                                 if self.fleet_carrier_status_label.winfo_exists():
-                                    logger.info(f"[init_gui] Fleet carrier widgets exist, returning existing frame (EARLY RETURN)")
                                     # GUI already initialized and widgets exist, return existing frame
                                     return self.frame
-                                else:
-                                    logger.warning(f"[init_gui] Fleet carrier status label doesn't exist, need to reinitialize")
-                            except (tk.TclError, AttributeError) as e:
-                                logger.warning(f"[init_gui] Error checking fleet carrier status label: {e}, need to reinitialize")
+                            except (tk.TclError, AttributeError):
                                 # Widget was destroyed, need to reinitialize
                                 self._gui_initialized = False
-                    else:
-                        logger.warning(f"[init_gui] Frame doesn't exist, need to reinitialize")
-                except (tk.TclError, AttributeError) as e:
-                    logger.warning(f"[init_gui] Error checking frame existence: {e}, need to reinitialize")
+                except (tk.TclError, AttributeError):
                     # Frame was destroyed, need to reinitialize
                     self._gui_initialized = False
-            else:
-                logger.warning(f"[init_gui] No frame attribute or frame is None, need to reinitialize")
-                self._gui_initialized = False
         
-        # SECOND: Check if there are any existing frames in parent that look like ours
-        # This handles the case where plugin_app() is called multiple times
-        logger.info(f"[init_gui] Checking parent for existing frames")
+        # Check for and destroy any existing frames with fleet carrier widgets (defensive check)
         try:
-            parent_children = parent.winfo_children()
-            logger.info(f"[init_gui] Parent has {len(parent_children)} children")
-            existing_frames = []
-            for idx, widget in enumerate(parent_children):
+            for widget in parent.winfo_children():
                 if isinstance(widget, tk.Frame):
-                    logger.info(f"[init_gui] Found Frame {idx}, checking for fleet carrier widgets")
-                    # Check if this frame has our signature widgets (fleet carrier widgets)
+                    # Check if this frame has our signature widgets
                     try:
-                        children = widget.winfo_children()
-                        logger.info(f"[init_gui] Frame {idx} has {len(children)} children")
-                        # Look for fleet carrier status label as signature
-                        for child_idx, child in enumerate(children):
+                        for child in widget.winfo_children():
                             if isinstance(child, tk.Label):
                                 try:
                                     text = child.cget('text')
                                     if text and 'Fleet Carrier' in text:
-                                        logger.warning(f"[init_gui] Found Fleet Carrier widget in Frame {idx}, child {child_idx}: '{text}'")
-                                        # This looks like our frame - destroy it to prevent duplicates
-                                        existing_frames.append((idx, widget))
+                                        # Found our frame - reuse if it's our tracked frame
+                                        if hasattr(self, 'frame') and widget == self.frame:
+                                            try:
+                                                if self.frame.winfo_exists():
+                                                    if (hasattr(self, 'fleet_carrier_status_label') and 
+                                                        self.fleet_carrier_status_label and
+                                                        self.fleet_carrier_status_label.winfo_exists()):
+                                                        self._gui_initialized = True
+                                                        return self.frame
+                                            except (tk.TclError, AttributeError):
+                                                pass
+                                        # Otherwise destroy duplicate frames
+                                        for child_widget in widget.winfo_children():
+                                            try:
+                                                child_widget.destroy()
+                                            except Exception:
+                                                pass
+                                        widget.destroy()
                                         break
-                                except Exception as e:
-                                    logger.debug(f"[init_gui] Error checking label text: {e}")
-                    except Exception as e:
-                        logger.debug(f"[init_gui] Error checking frame children: {e}")
-            
-            logger.info(f"[init_gui] Found {len(existing_frames)} existing frames with fleet carrier widgets")
-            
-            # Destroy ALL existing frames that look like ours (they're duplicates)
-            for frame_idx, frame in existing_frames:
-                try:
-                    logger.info(f"[init_gui] Processing existing frame {frame_idx}")
-                    # Don't destroy if it's our tracked frame and it's still valid
-                    if hasattr(self, 'frame') and frame == self.frame:
-                        logger.info(f"[init_gui] Frame {frame_idx} is our tracked frame, checking if valid")
-                        try:
-                            if self.frame.winfo_exists():
-                                logger.info(f"[init_gui] Our tracked frame exists and is valid")
-                                # Our frame exists and is valid, check widgets
-                                if (hasattr(self, 'fleet_carrier_status_label') and 
-                                    self.fleet_carrier_status_label):
-                                    try:
-                                        if self.fleet_carrier_status_label.winfo_exists():
-                                            logger.info(f"[init_gui] Widgets exist in tracked frame, reusing (EARLY RETURN)")
-                                            # Widgets exist and are valid, reuse this frame
-                                            self._gui_initialized = True
-                                            return self.frame
-                                    except (tk.TclError, AttributeError) as e:
-                                        logger.warning(f"[init_gui] Error checking tracked frame widgets: {e}")
-                        except (tk.TclError, AttributeError) as e:
-                            logger.warning(f"[init_gui] Error checking tracked frame existence: {e}")
-                    # Destroy duplicate frames
-                    logger.warning(f"[init_gui] Destroying duplicate frame {frame_idx}")
-                    frame_children = frame.winfo_children()
-                    logger.info(f"[init_gui] Frame {frame_idx} has {len(frame_children)} children to destroy")
-                    for child in frame_children:
-                        try:
-                            child.destroy()
-                        except Exception as e:
-                            logger.debug(f"[init_gui] Error destroying child: {e}")
-                    frame.destroy()
-                    logger.info(f"[init_gui] Frame {frame_idx} destroyed")
-                except Exception as e:
-                    logger.warning(f"[init_gui] Error destroying frame {frame_idx}: {e}")
-        except Exception as e:
-            logger.warning(f"[init_gui] Error checking parent for existing frames: {e}")
+                                except Exception:
+                                    pass
+                    except Exception:
+                        pass
+        except Exception:
+            pass
         
-        # Check if our tracked frame exists and is valid
-        logger.info(f"[init_gui] Checking if tracked frame exists")
-        widgets_exist = False
-        if hasattr(self, 'frame') and self.frame:
-            logger.info(f"[init_gui] Tracked frame attribute exists")
-            try:
-                if self.frame.winfo_exists():
-                    logger.info(f"[init_gui] Tracked frame exists and is valid")
-                    # Frame exists, check if fleet carrier widgets exist
-                    if (hasattr(self, 'fleet_carrier_status_label') and 
-                        self.fleet_carrier_status_label):
-                        try:
-                            if self.fleet_carrier_status_label.winfo_exists():
-                                logger.info(f"[init_gui] Fleet carrier widgets exist in tracked frame (EARLY RETURN)")
-                                # Widgets already exist, don't recreate
-                                widgets_exist = True
-                                self._gui_initialized = True
-                        except (tk.TclError, AttributeError) as e:
-                            logger.warning(f"[init_gui] Error checking fleet carrier status label: {e}")
-                            # Widget was destroyed, need to recreate
-                            widgets_exist = False
-                    else:
-                        logger.warning(f"[init_gui] No fleet_carrier_status_label attribute")
-                else:
-                    logger.warning(f"[init_gui] Tracked frame doesn't exist")
-            except (tk.TclError, AttributeError) as e:
-                logger.warning(f"[init_gui] Error checking tracked frame existence: {e}")
-                # Frame was destroyed, need to recreate
-                widgets_exist = False
-        else:
-            logger.info(f"[init_gui] No tracked frame attribute or frame is None")
-        
-        # If widgets already exist, skip widget creation
-        if widgets_exist:
-            logger.info(f"[init_gui] Widgets exist, returning existing frame (EARLY RETURN)")
-            return self.frame
-        
-        logger.info(f"[init_gui] Proceeding with widget creation")
-        
-        # Widgets don't exist or were destroyed - destroy frame and recreate everything
+        # Destroy existing frame if it exists
         if hasattr(self, 'frame') and self.frame:
             try:
-                # Check if frame still exists and is valid
                 try:
                     self.frame.winfo_exists()
                     # Frame exists, destroy all child widgets first
@@ -274,54 +188,13 @@ class SpanshRouter():
         self.fleet_carrier_balance_label = None
         self.fleet_carrier_separator = None
         
-        # FINAL CHECK: Before creating frame, check if fleet carrier widgets already exist anywhere in parent
-        # This is the most aggressive check to prevent duplicates
-        logger.info(f"[init_gui] Final check: Looking for fleet carrier widgets in parent")
-        try:
-            parent_children = parent.winfo_children()
-            logger.info(f"[init_gui] Final check: Parent has {len(parent_children)} children")
-            for widget_idx, widget in enumerate(parent_children):
-                if isinstance(widget, tk.Frame):
-                    logger.info(f"[init_gui] Final check: Checking Frame {widget_idx}")
-                    try:
-                        # Check all children of this frame for fleet carrier widgets
-                        frame_children = widget.winfo_children()
-                        logger.info(f"[init_gui] Final check: Frame {widget_idx} has {len(frame_children)} children")
-                        for child_idx, child in enumerate(frame_children):
-                            if isinstance(child, (tk.Label, ttk.Combobox, tk.Button)):
-                                try:
-                                    if isinstance(child, tk.Label):
-                                        text = child.cget('text')
-                                        if text and 'Fleet Carrier' in text:
-                                            # Found existing fleet carrier widgets - don't create new ones
-                                            logger.warning(f"[init_gui] Final check: Found Fleet Carrier widget in Frame {widget_idx}, child {child_idx}: '{text}' - SKIPPING CREATION")
-                                            # Try to find and return the existing frame
-                                            if hasattr(self, 'frame') and widget == self.frame:
-                                                logger.info(f"[init_gui] Final check: Frame matches tracked frame, returning it")
-                                                return self.frame
-                                            # Otherwise, set this as our frame
-                                            logger.info(f"[init_gui] Final check: Setting Frame {widget_idx} as our tracked frame")
-                                            self.frame = widget
-                                            self._gui_initialized = True
-                                            return self.frame
-                                except Exception as e:
-                                    logger.debug(f"[init_gui] Final check: Error checking child {child_idx}: {e}")
-                    except Exception as e:
-                        logger.debug(f"[init_gui] Final check: Error checking Frame {widget_idx} children: {e}")
-        except Exception as e:
-            logger.warning(f"[init_gui] Final check: Error checking parent: {e}")
-        
         # Create frame fresh
-        logger.info(f"[init_gui] Creating new frame")
         self.frame = tk.Frame(parent, borderwidth=2)
         self.frame.grid(sticky=tk.NSEW, columnspan=2)
-        logger.info(f"[init_gui] New frame created and gridded")
         
         # Fleet carrier status display (compact, at top)
         # Create all widgets fresh
-        logger.info(f"[init_gui] Creating fleet carrier widgets")
         self.fleet_carrier_status_label = tk.Label(self.frame, text="Fleet Carrier:")
-        logger.info(f"[init_gui] Created fleet_carrier_status_label")
         self.fleet_carrier_combobox = ttk.Combobox(
             self.frame, 
             textvariable=self.fleet_carrier_var,
@@ -405,9 +278,7 @@ class SpanshRouter():
         row = 0
         # Fleet carrier status at the top
         # Store grid positions to prevent accidental repositioning
-        logger.info(f"[init_gui] Positioning fleet carrier widgets starting at row {row}")
         self.fleet_carrier_status_label.grid(row=row, column=0, padx=5, pady=2, sticky=tk.W)
-        logger.info(f"[init_gui] Gridded fleet_carrier_status_label at row {row}, column 0")
         self.fleet_carrier_combobox.grid(row=row, column=1, padx=5, pady=2, sticky=tk.W)
         self.fleet_carrier_details_btn.grid(row=row, column=2, padx=2, pady=2, sticky=tk.W)
         self.fleet_carrier_inara_btn.grid(row=row, column=3, padx=2, pady=2, sticky=tk.W)
@@ -489,12 +360,10 @@ class SpanshRouter():
         self.range_entry.var.trace('w', self.check_range)
 
         # Initialize GUI to appropriate state
-        logger.info(f"[init_gui] Calling update_gui()")
         self.update_gui()
         
         # Mark GUI as initialized
         self._gui_initialized = True
-        logger.info(f"[init_gui] GUI initialization complete, _gui_initialized set to True")
 
         return self.frame
 

@@ -1,11 +1,8 @@
 import os
 import sys
-import logging
-import tkinter
 import tkinter.messagebox as confirmDialog
 
 from companion import SERVER_LIVE, SERVER_LEGACY, SERVER_BETA  # type: ignore
-from config import appname  # type: ignore
 
 # Import SpanshRouter class - this must work regardless of plugin folder name
 try:
@@ -16,10 +13,6 @@ except ImportError as e:
     if plugin_dir not in sys.path:
         sys.path.insert(0, plugin_dir)
     from SpanshRouter.SpanshRouter import SpanshRouter
-
-# Set up logger
-plugin_name = os.path.basename(os.path.dirname(os.path.abspath(__file__)))
-logger = logging.getLogger(f'{appname}.{plugin_name}')
 
 spansh_router = None
 
@@ -163,44 +156,7 @@ def ask_for_update():
 
 def plugin_app(parent):
     global spansh_router
-    
-    logger.info(f"[plugin_app] Called with parent: {parent}")
-    
-    # Check if fleet carrier widgets already exist in parent before calling init_gui
-    # This prevents duplicate creation if plugin_app() is called multiple times
-    existing_frame_found = False
-    try:
-        parent_children = parent.winfo_children()
-        logger.info(f"[plugin_app] Parent has {len(parent_children)} children")
-        for idx, widget in enumerate(parent_children):
-            if isinstance(widget, tkinter.Frame):
-                try:
-                    frame_children = widget.winfo_children()
-                    logger.info(f"[plugin_app] Frame {idx} has {len(frame_children)} children")
-                    for child_idx, child in enumerate(frame_children):
-                        if isinstance(child, tkinter.Label):
-                            try:
-                                text = child.cget('text')
-                                if text and 'Fleet Carrier' in text:
-                                    logger.warning(f"[plugin_app] Found existing Fleet Carrier widget in frame {idx}, child {child_idx}: '{text}'")
-                                    existing_frame_found = True
-                                    # Fleet carrier widgets already exist, return existing frame
-                                    if hasattr(spansh_router, 'frame') and widget == spansh_router.frame:
-                                        logger.info(f"[plugin_app] Returning existing tracked frame")
-                                        return spansh_router.frame
-                            except Exception as e:
-                                logger.debug(f"[plugin_app] Error checking label text: {e}")
-                except Exception as e:
-                    logger.debug(f"[plugin_app] Error checking frame children: {e}")
-    except Exception as e:
-        logger.warning(f"[plugin_app] Error checking parent children: {e}")
-    
-    if existing_frame_found:
-        logger.warning(f"[plugin_app] Existing fleet carrier widgets found but not tracked, proceeding with init_gui anyway")
-    
-    logger.info(f"[plugin_app] Calling init_gui()")
     frame = spansh_router.init_gui(parent)
-    logger.info(f"[plugin_app] init_gui() returned frame: {frame}")
     spansh_router.open_last_route()
         # Update fleet carrier status display if carrier data exists
     if hasattr(spansh_router, 'update_fleet_carrier_dropdown'):
