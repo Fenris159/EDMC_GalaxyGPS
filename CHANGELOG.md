@@ -2,6 +2,97 @@
 
 All notable changes to this project will be documented in this file.
 
+## 3.4.0
+
+### Route View Enhancements
+
+- **Next Waypoint Highlighting**: Current next waypoint row is highlighted in light yellow in the "View Route" window
+  - Makes it easy to locate your position in the route at a glance
+  - Highlight automatically updates as you progress through the route
+  - Window refreshes dynamically when next waypoint changes (if window is open)
+
+- **EDSM Integration**: Added EDSM buttons to both "View Route" and "View All Carriers" windows
+  - "EDSM" button appears before each system name
+  - Opens system page on EDSM.net as an alternative to Inara.cz
+  - Useful for systems that may not appear on Inara
+
+- **Visual Indicator Improvements**:
+  - **Neutron Star Indicator**: Changed from red to light blue dot to distinguish from other indicators
+  - **Dot Indicator Alignment**: All dot indicators (Icy Rings, Pristine, Refuel, Neutron Star, etc.) are now center-aligned within their columns
+  - Improved visual consistency and readability
+
+- **Automatic Column Width Adjustment**: Columns now automatically resize to fit content
+  - Prevents text cutoff for long system names or data values
+  - Calculates maximum width needed based on both headers and all data rows
+  - Window opens wide enough to display all columns with scrollbars when needed
+  - Applies to both "View Route" and "View All Carriers" windows
+
+- **Improved CSV Data Preservation**: Enhanced CSV import to store all data in memory
+  - Preserves all columns from original CSV for display in "View Route" window
+  - No longer relies on reading original CSV file - all data stored in memory
+  - More efficient and robust - works even if original file is moved or deleted
+  - Filters minimal data for route planner while retaining full data for display
+
+### Fleet Carrier Management Improvements
+
+- **Missing Data Handling**: Improved display of missing numerical values
+  - Shows "Needs Update" for missing balance, cargo value, fuel, or cargo count
+  - Distinguishes between legitimate zero values (displayed as "0") and missing data (displayed as "Needs Update")
+  - Helps identify when carrier data needs to be refreshed via CAPI
+  - Applies to both main UI display and "View All Carriers" window
+
+- **Enhanced "View All Carriers" Window**:
+  - Automatic column width adjustment for optimal display
+  - "Needs Update" text properly accounted for in column sizing
+  - All dot indicators center-aligned for better visual consistency
+
+### Route Planning Improvements
+
+- **Plot Route Button Enhancement**: Improved route planning interface
+  - Button changes from "Plot Route" to "Calculate" when options are shown
+  - "Cancel" button appears next to "Calculate" to return to default view
+  - Button returns to "Plot Route" state after route calculation completes
+  - Clearer workflow and user feedback
+
+- **Distance Rounding**: All distance values rounded up to nearest hundredth
+  - Prevents underestimating distances
+  - Applies to "Distance to Arrival", "Distance Remaining", and "Fuel Used" displays
+  - Consistent rounding throughout the plugin
+
+### UI/UX Refinements
+
+- **Visual Separators**: Added column separators (grid lines) to detail windows
+  - Improves readability and alignment in "View Route" and "View All Carriers" windows
+  - Helps align data with column headers
+
+- **Improved Column Alignment**: Perfect alignment between headers and data
+  - Refactored to use single grid layout for headers and data rows
+  - Text columns left-aligned, numeric columns right-aligned, indicator columns center-aligned
+  - Consistent spacing and padding throughout
+
+- **UI Compaction**: Optimized horizontal spacing in main plugin window
+  - Reduced gaps between elements while maintaining readability
+  - Better organization of route action buttons
+  - Improved layout efficiency
+
+### Technical Improvements
+
+- **In-Memory Data Storage**: Route data now stored entirely in memory
+  - `route_full_data` array preserves all CSV columns
+  - `route_fieldnames` preserves original CSV header names
+  - Eliminates file I/O when viewing routes
+  - Faster access and more reliable data preservation
+
+- **Route Window Management**: Dynamic window refresh system
+  - Route window automatically refreshes when next waypoint changes
+  - Window reference tracking for efficient updates
+  - Proper cleanup when windows are closed
+
+- **Error Handling**: Enhanced error handling for missing data
+  - Proper detection of missing vs. zero values
+  - Graceful handling of incomplete carrier data
+  - Better user feedback for data refresh needs
+
 ## 3.3.0
 
 ### Major Features

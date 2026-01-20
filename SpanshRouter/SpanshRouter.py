@@ -2356,7 +2356,117 @@ class SpanshRouter():
             
             # Define headers and column widths first - add EDSM button before System
             headers = ["Select", "Callsign", "Name", "EDSM", "System", "Tritium", "Balance", "Cargo", "State", "Theme", "Icy Rings", "Pristine", "Docking Access", "Notorious Access", "Last Updated"]
-            column_widths = [8, 12, 20, 6, 20, 15, 15, 20, 15, 15, 12, 12, 15, 18, 20]
+            # Start with header-based widths
+            column_widths = [
+                max(8, len("Select")),      # Select button
+                max(12, len("Callsign")),    # Callsign
+                max(20, len("Name")),        # Name
+                max(6, len("EDSM")),         # EDSM button
+                max(20, len("System")),      # System
+                max(15, len("Tritium")),     # Tritium
+                max(15, len("Balance")),     # Balance
+                max(20, len("Cargo")),       # Cargo
+                max(15, len("State")),       # State
+                max(15, len("Theme")),       # Theme
+                max(12, len("Icy Rings")),   # Icy Rings
+                max(12, len("Pristine")),    # Pristine
+                max(15, len("Docking Access")),  # Docking Access
+                max(18, len("Notorious Access")), # Notorious Access
+                max(20, len("Last Updated"))  # Last Updated
+            ]
+            
+            # Calculate maximum content width for each column by checking all carrier data
+            for carrier in carriers:
+                callsign = carrier.get('callsign', 'Unknown')
+                name = carrier.get('name', '') or 'Unnamed'
+                system = carrier.get('current_system', 'Unknown')
+                
+                # Check for missing numerical values
+                fuel_raw = carrier.get('fuel')
+                tritium_cargo_raw = carrier.get('tritium_in_cargo')
+                balance_raw = carrier.get('balance')
+                cargo_count_raw = carrier.get('cargo_count')
+                cargo_value_raw = carrier.get('cargo_total_value')
+                
+                # Check if values are missing (key doesn't exist, None, or empty string)
+                # Note: '0' or 0 are valid values, so we only mark as missing if key doesn't exist or value is None/empty
+                fuel_missing = 'fuel' not in carrier or fuel_raw is None or (isinstance(fuel_raw, str) and fuel_raw.strip() == '')
+                tritium_cargo_missing = 'tritium_in_cargo' not in carrier or tritium_cargo_raw is None or (isinstance(tritium_cargo_raw, str) and tritium_cargo_raw.strip() == '')
+                balance_missing = 'balance' not in carrier or balance_raw is None or (isinstance(balance_raw, str) and balance_raw.strip() == '')
+                cargo_count_missing = 'cargo_count' not in carrier or cargo_count_raw is None or (isinstance(cargo_count_raw, str) and cargo_count_raw.strip() == '')
+                cargo_value_missing = 'cargo_total_value' not in carrier or cargo_value_raw is None or (isinstance(cargo_value_raw, str) and cargo_value_raw.strip() == '')
+                
+                # Use raw values or defaults for formatting
+                fuel = fuel_raw if fuel_raw is not None else '0'
+                tritium_cargo = tritium_cargo_raw if tritium_cargo_raw is not None else '0'
+                balance = balance_raw if balance_raw is not None else '0'
+                cargo_count = cargo_count_raw if cargo_count_raw is not None else '0'
+                cargo_value = cargo_value_raw if cargo_value_raw is not None else '0'
+                
+                state = carrier.get('state', 'Unknown')
+                theme = carrier.get('theme', 'Unknown')
+                docking_access = carrier.get('docking_access', '')
+                last_updated = carrier.get('last_updated', 'Unknown')
+                
+                # Format balance - show "Needs Update" if missing, otherwise format with commas (including 0)
+                if balance_missing:
+                    balance_formatted = "Needs Update"
+                else:
+                    try:
+                        balance_int = int(balance) if balance else 0
+                        balance_formatted = f"{balance_int:,}"
+                    except (ValueError, TypeError):
+                        balance_formatted = str(balance) if balance else "Needs Update"
+                
+                # Format cargo value - show "Needs Update" if missing, otherwise format with commas (including 0)
+                if cargo_value_missing:
+                    cargo_value_formatted = "Needs Update"
+                else:
+                    try:
+                        cargo_value_int = int(cargo_value) if cargo_value else 0
+                        cargo_value_formatted = f"{cargo_value_int:,}"
+                    except (ValueError, TypeError):
+                        cargo_value_formatted = str(cargo_value) if cargo_value else "Needs Update"
+                
+                # Format cargo text - show "Needs Update" if either count or value is missing
+                if cargo_count_missing or cargo_value_missing:
+                    cargo_text = "Needs Update"
+                else:
+                    try:
+                        cargo_count_int = int(cargo_count) if cargo_count else 0
+                        cargo_text = f"{cargo_count_int} ({cargo_value_formatted} cr)"
+                    except (ValueError, TypeError):
+                        cargo_text = "Needs Update"
+                
+                # Format Tritium - show "Needs Update" if fuel is missing, otherwise show value (including 0)
+                if fuel_missing:
+                    tritium_text = "Needs Update"
+                elif not tritium_cargo_missing and tritium_cargo and tritium_cargo != '0':
+                    try:
+                        fuel_int = int(fuel) if fuel else 0
+                        tritium_cargo_int = int(tritium_cargo) if tritium_cargo else 0
+                        tritium_text = f"{fuel_int} / {tritium_cargo_int}"
+                    except (ValueError, TypeError):
+                        tritium_text = f"{fuel} / {tritium_cargo}" if fuel and tritium_cargo else str(fuel) if fuel else "Needs Update"
+                else:
+                    try:
+                        fuel_int = int(fuel) if fuel else 0
+                        tritium_text = str(fuel_int)
+                    except (ValueError, TypeError):
+                        tritium_text = str(fuel) if fuel else "Needs Update"
+                
+                # Update column widths based on actual content (add 2 for padding)
+                # Account for "Needs Update" text which is longer
+                column_widths[1] = max(column_widths[1], len(str(callsign)) + 2)  # Callsign
+                column_widths[2] = max(column_widths[2], len(str(name)) + 2)      # Name
+                column_widths[4] = max(column_widths[4], len(str(system)) + 2)     # System
+                column_widths[5] = max(column_widths[5], len(str(tritium_text)) + 2)  # Tritium
+                column_widths[6] = max(column_widths[6], len(str(balance_formatted)) + 2)  # Balance
+                column_widths[7] = max(column_widths[7], len(str(cargo_text)) + 2)  # Cargo
+                column_widths[8] = max(column_widths[8], len(str(state)) + 2)       # State
+                column_widths[9] = max(column_widths[9], len(str(theme)) + 2)      # Theme
+                column_widths[12] = max(column_widths[12], len(str(docking_access)) + 2)  # Docking Access
+                column_widths[14] = max(column_widths[14], len(str(last_updated)) + 2)  # Last Updated
             
             # Calculate required width based on columns
             # More accurate estimate: column_widths * 8-10 pixels per character + padding + separators
@@ -2467,11 +2577,29 @@ class SpanshRouter():
                 callsign = carrier.get('callsign', 'Unknown')
                 name = carrier.get('name', '') or 'Unnamed'
                 system = carrier.get('current_system', 'Unknown')
-                fuel = carrier.get('fuel', '0')
-                tritium_cargo = carrier.get('tritium_in_cargo', '0')
-                balance = carrier.get('balance', '0')
-                cargo_count = carrier.get('cargo_count', '0')
-                cargo_value = carrier.get('cargo_total_value', '0')
+                
+                # Check for missing numerical values - use None if key doesn't exist or value is None/empty
+                fuel_raw = carrier.get('fuel')
+                tritium_cargo_raw = carrier.get('tritium_in_cargo')
+                balance_raw = carrier.get('balance')
+                cargo_count_raw = carrier.get('cargo_count')
+                cargo_value_raw = carrier.get('cargo_total_value')
+                
+                # Check if values are missing (key doesn't exist, None, or empty string)
+                # Note: '0' or 0 are valid values, so we only mark as missing if key doesn't exist or value is None/empty
+                fuel_missing = 'fuel' not in carrier or fuel_raw is None or (isinstance(fuel_raw, str) and fuel_raw.strip() == '')
+                tritium_cargo_missing = 'tritium_in_cargo' not in carrier or tritium_cargo_raw is None or (isinstance(tritium_cargo_raw, str) and tritium_cargo_raw.strip() == '')
+                balance_missing = 'balance' not in carrier or balance_raw is None or (isinstance(balance_raw, str) and balance_raw.strip() == '')
+                cargo_count_missing = 'cargo_count' not in carrier or cargo_count_raw is None or (isinstance(cargo_count_raw, str) and cargo_count_raw.strip() == '')
+                cargo_value_missing = 'cargo_total_value' not in carrier or cargo_value_raw is None or (isinstance(cargo_value_raw, str) and cargo_value_raw.strip() == '')
+                
+                # Use raw values or defaults for formatting
+                fuel = fuel_raw if fuel_raw is not None else '0'
+                tritium_cargo = tritium_cargo_raw if tritium_cargo_raw is not None else '0'
+                balance = balance_raw if balance_raw is not None else '0'
+                cargo_count = cargo_count_raw if cargo_count_raw is not None else '0'
+                cargo_value = cargo_value_raw if cargo_value_raw is not None else '0'
+                
                 state = carrier.get('state', 'Unknown')
                 theme = carrier.get('theme', 'Unknown')
                 icy_rings = carrier.get('icy_rings', '')
@@ -2480,21 +2608,53 @@ class SpanshRouter():
                 notorious_access = carrier.get('notorious_access', '')
                 last_updated = carrier.get('last_updated', 'Unknown')
                 
-                # Format balance and cargo value
-                try:
-                    balance_formatted = f"{int(balance):,}" if balance else "0"
-                    cargo_value_formatted = f"{int(cargo_value):,}" if cargo_value else "0"
-                except (ValueError, TypeError):
-                    balance_formatted = balance
-                    cargo_value_formatted = cargo_value
+                # Format balance - show "Needs Update" if missing, otherwise format with commas (including 0)
+                if balance_missing:
+                    balance_formatted = "Needs Update"
+                else:
+                    try:
+                        balance_int = int(balance) if balance else 0
+                        balance_formatted = f"{balance_int:,}"
+                    except (ValueError, TypeError):
+                        balance_formatted = str(balance) if balance else "Needs Update"
                 
-                cargo_text = f"{cargo_count} ({cargo_value_formatted} cr)"
+                # Format cargo value - show "Needs Update" if missing, otherwise format with commas (including 0)
+                if cargo_value_missing:
+                    cargo_value_formatted = "Needs Update"
+                else:
+                    try:
+                        cargo_value_int = int(cargo_value) if cargo_value else 0
+                        cargo_value_formatted = f"{cargo_value_int:,}"
+                    except (ValueError, TypeError):
+                        cargo_value_formatted = str(cargo_value) if cargo_value else "Needs Update"
+                
+                # Format cargo text - show "Needs Update" if either count or value is missing
+                if cargo_count_missing or cargo_value_missing:
+                    cargo_text = "Needs Update"
+                else:
+                    try:
+                        cargo_count_int = int(cargo_count) if cargo_count else 0
+                        cargo_text = f"{cargo_count_int} ({cargo_value_formatted} cr)"
+                    except (ValueError, TypeError):
+                        cargo_text = "Needs Update"
                 
                 # Format Tritium: fuel / cargo (or just fuel if no cargo)
-                if tritium_cargo and tritium_cargo != '0':
-                    tritium_text = f"{fuel} / {tritium_cargo}"
+                # Show "Needs Update" if fuel is missing, otherwise show value (including 0)
+                if fuel_missing:
+                    tritium_text = "Needs Update"
+                elif not tritium_cargo_missing and tritium_cargo and tritium_cargo != '0':
+                    try:
+                        fuel_int = int(fuel) if fuel else 0
+                        tritium_cargo_int = int(tritium_cargo) if tritium_cargo else 0
+                        tritium_text = f"{fuel_int} / {tritium_cargo_int}"
+                    except (ValueError, TypeError):
+                        tritium_text = f"{fuel} / {tritium_cargo}" if fuel and tritium_cargo else str(fuel) if fuel else "Needs Update"
                 else:
-                    tritium_text = fuel
+                    try:
+                        fuel_int = int(fuel) if fuel else 0
+                        tritium_text = str(fuel_int)
+                    except (ValueError, TypeError):
+                        tritium_text = str(fuel) if fuel else "Needs Update"
                 
                 # Use the same column indexing pattern as headers (i*2 for labels, i*2+1 for separators)
                 # Use column_widths array to ensure alignment with headers
@@ -2609,8 +2769,11 @@ class SpanshRouter():
                 icy_rings_width = column_widths[col_idx] if col_idx < len(column_widths) else 20
                 icy_rings_str = str(icy_rings).strip().lower() if icy_rings else ''
                 icy_rings_value = icy_rings_str == 'yes'
-                icy_rings_canvas = tk.Canvas(table_frame, width=20, height=20, highlightthickness=0, bg=row_bg)
-                icy_rings_canvas.grid(row=data_row, column=col_idx*2, padx=2, pady=5, sticky=tk.EW)
+                # Create a frame to center the canvas within the column
+                icy_rings_frame = tk.Frame(table_frame, bg=row_bg)
+                icy_rings_frame.grid(row=data_row, column=col_idx*2, padx=2, pady=5, sticky=tk.EW)
+                icy_rings_canvas = tk.Canvas(icy_rings_frame, width=20, height=20, highlightthickness=0, bg=row_bg)
+                icy_rings_canvas.pack(anchor=tk.CENTER)  # Center the canvas in the frame
                 if icy_rings_value:
                     icy_rings_canvas.create_oval(5, 5, 15, 15, fill="red", outline="darkred", width=1)
                 else:
@@ -2624,8 +2787,11 @@ class SpanshRouter():
                 pristine_width = column_widths[col_idx] if col_idx < len(column_widths) else 20
                 pristine_str = str(pristine).strip().lower() if pristine else ''
                 pristine_value = pristine_str == 'yes'
-                pristine_canvas = tk.Canvas(table_frame, width=20, height=20, highlightthickness=0, bg=row_bg)
-                pristine_canvas.grid(row=data_row, column=col_idx*2, padx=2, pady=5, sticky=tk.EW)
+                # Create a frame to center the canvas within the column
+                pristine_frame = tk.Frame(table_frame, bg=row_bg)
+                pristine_frame.grid(row=data_row, column=col_idx*2, padx=2, pady=5, sticky=tk.EW)
+                pristine_canvas = tk.Canvas(pristine_frame, width=20, height=20, highlightthickness=0, bg=row_bg)
+                pristine_canvas.pack(anchor=tk.CENTER)  # Center the canvas in the frame
                 if pristine_value:
                     pristine_canvas.create_oval(5, 5, 15, 15, fill="red", outline="darkred", width=1)
                 else:
@@ -2639,8 +2805,11 @@ class SpanshRouter():
                 docking_access_width = column_widths[col_idx] if col_idx < len(column_widths) else 20
                 docking_access_str = str(docking_access).strip().lower() if docking_access else ''
                 docking_access_value = docking_access_str in ['yes', 'all', 'friends', 'squadron']
-                docking_access_canvas = tk.Canvas(table_frame, width=20, height=20, highlightthickness=0, bg=row_bg)
-                docking_access_canvas.grid(row=data_row, column=col_idx*2, padx=2, pady=5, sticky=tk.EW)
+                # Create a frame to center the canvas within the column
+                docking_access_frame = tk.Frame(table_frame, bg=row_bg)
+                docking_access_frame.grid(row=data_row, column=col_idx*2, padx=2, pady=5, sticky=tk.EW)
+                docking_access_canvas = tk.Canvas(docking_access_frame, width=20, height=20, highlightthickness=0, bg=row_bg)
+                docking_access_canvas.pack(anchor=tk.CENTER)  # Center the canvas in the frame
                 if docking_access_value:
                     docking_access_canvas.create_oval(5, 5, 15, 15, fill="red", outline="darkred", width=1)
                 else:
@@ -2657,8 +2826,11 @@ class SpanshRouter():
                     notorious_access_value = notorious_access_str in ['true', 'yes', '1']
                 else:
                     notorious_access_value = bool(notorious_access) if notorious_access else False
-                notorious_access_canvas = tk.Canvas(table_frame, width=20, height=20, highlightthickness=0, bg=row_bg)
-                notorious_access_canvas.grid(row=data_row, column=col_idx*2, padx=2, pady=5, sticky=tk.EW)
+                # Create a frame to center the canvas within the column
+                notorious_access_frame = tk.Frame(table_frame, bg=row_bg)
+                notorious_access_frame.grid(row=data_row, column=col_idx*2, padx=2, pady=5, sticky=tk.EW)
+                notorious_access_canvas = tk.Canvas(notorious_access_frame, width=20, height=20, highlightthickness=0, bg=row_bg)
+                notorious_access_canvas.pack(anchor=tk.CENTER)  # Center the canvas in the frame
                 if notorious_access_value:
                     notorious_access_canvas.create_oval(5, 5, 15, 15, fill="red", outline="darkred", width=1)
                 else:
@@ -3377,8 +3549,44 @@ class SpanshRouter():
                 display_columns_with_edsm = ["EDSM"] + display_columns
             
             headers = ["#"] + display_columns_with_edsm
-            # Column widths: 4 for step number, then calculated widths (6 for EDSM, calculated for others)
+            # Calculate column widths based on both header and data content
+            # Start with header widths
             column_widths = [4] + [6 if h == "EDSM" else max(15, len(h)) for h in display_columns_with_edsm]
+            
+            # Now check all data rows to find maximum content width for each column
+            # Iterate through headers (skip step number "#" at index 0)
+            for header_idx, header_name in enumerate(display_columns_with_edsm, start=1):
+                # Skip EDSM column (it's fixed width at 6)
+                if header_name == "EDSM":
+                    continue
+                
+                # Find corresponding field in display_columns
+                field_lower = header_name.lower()
+                
+                # Check all route entries for this column
+                for idx, route_entry in enumerate(route_data):
+                    # Get value from route_entry
+                    raw_value = route_entry.get(field_lower, '')
+                    if raw_value is None or str(raw_value).strip().lower() == 'none':
+                        value = ''
+                    else:
+                        value = str(raw_value).strip() if isinstance(raw_value, str) else str(raw_value)
+                    
+                    # For Road to Riches, handle system name repetition
+                    if self.roadtoriches and field_lower == self.system_header.lower():
+                        # Use previous system name if current is empty
+                        if not value and idx > 0:
+                            prev_entry = route_data[idx - 1]
+                            if field_lower in prev_entry:
+                                value = prev_entry.get(field_lower, '').strip()
+                    
+                    # Calculate width needed for this value (add 2 for padding)
+                    if value:
+                        value_width = len(str(value))
+                        # Update column width if this value is wider
+                        # header_idx corresponds to column_widths index (header_idx already accounts for step number)
+                        if header_idx < len(column_widths):
+                            column_widths[header_idx] = max(column_widths[header_idx], value_width + 2)
             
             # Calculate required width based on columns (after column_widths is defined)
             # More accurate estimate: column_widths * 8-10 pixels per character + padding + separators
@@ -3584,9 +3792,13 @@ class SpanshRouter():
                             dot_color = "red"
                             dot_outline = "darkred"
                         
-                        # Create a canvas to draw a colored dot
-                        checkbox_canvas = tk.Canvas(table_frame, width=20, height=20, highlightthickness=0, bg=row_bg)
-                        checkbox_canvas.grid(row=data_row, column=col_idx*2, padx=2, pady=5, sticky=tk.EW)
+                        # Create a frame to center the canvas within the column
+                        checkbox_frame = tk.Frame(table_frame, bg=row_bg)
+                        checkbox_frame.grid(row=data_row, column=col_idx*2, padx=2, pady=5, sticky=tk.EW)
+                        
+                        # Create a canvas to draw a colored dot (centered in frame)
+                        checkbox_canvas = tk.Canvas(checkbox_frame, width=20, height=20, highlightthickness=0, bg=row_bg)
+                        checkbox_canvas.pack(anchor=tk.CENTER)  # Center the canvas in the frame
                         
                         if checkbox_value:
                             # Draw a filled circle for "yes" (light blue for neutron star, red for others)
