@@ -1626,8 +1626,23 @@ class SpanshRouter():
                     jumps = waypoint.get("jumps", 0)
 
                     # Map API distance fields to internal format
-                    distance_to_arrival = waypoint.get("distance_jumped", "")
-                    distance_remaining = waypoint.get("distance_left", "")
+                    distance_to_arrival_raw = waypoint.get("distance_jumped", "")
+                    distance_remaining_raw = waypoint.get("distance_left", "")
+                    
+                    # Round distance values UP to nearest hundredth (2 decimal places)
+                    def round_distance(val):
+                        if not val or val == "":
+                            return ""
+                        try:
+                            val_float = float(val)
+                            # Round UP to nearest hundredth: multiply by 100, ceil, divide by 100
+                            rounded = math.ceil(val_float * 100) / 100
+                            return f"{rounded:.2f}"
+                        except (ValueError, TypeError):
+                            return val  # Return as-is if not a number
+                    
+                    distance_to_arrival = round_distance(distance_to_arrival_raw)
+                    distance_remaining = round_distance(distance_remaining_raw)
 
                     self.route.append([
                         system,
@@ -2301,16 +2316,16 @@ class SpanshRouter():
             for i, header in enumerate(headers):
                 # Right-align numeric columns, left-align text columns, center-align checkbox columns
                 header_lower = header.lower()
-                # Check if this is a checkbox column (Icy Rings, Pristine, Docking Access, Notorious Access, Refuel, Neutron Star, etc.)
-                is_checkbox_col = any(keyword in header_lower for keyword in ['icy rings', 'pristine', 'docking access', 'notorious access', 'refuel', 'neutron star', 'restock tritium', 'is terraformable'])
+                # Check if this is an indicator column (Icy Rings, Pristine, Docking Access, Notorious Access, Refuel, Neutron Star, etc.)
+                is_indicator_col = any(keyword in header_lower for keyword in ['icy rings', 'pristine', 'docking access', 'notorious access', 'refuel', 'neutron star', 'restock tritium', 'is terraformable'])
                 if header_lower == "edsm":  # EDSM button column - center align
                     anchor = "c"
                     sticky_val = tk.EW
                 elif header_lower in numeric_columns_fleet:
                     anchor = "e"  # Right-align for numeric columns
                     sticky = tk.E
-                elif is_checkbox_col:
-                    anchor = "c"  # Center-align for checkbox columns
+                elif is_indicator_col:
+                    anchor = "c"  # Center-align for indicator columns (colored dots)
                     sticky = tk.EW  # Expand to fill column width for centering
                 else:
                     anchor = "w"  # Left-align for text columns
@@ -2471,52 +2486,64 @@ class SpanshRouter():
                     separator8.grid(row=data_row, column=col_idx*2+1, padx=0, pady=2, sticky=tk.NS)
                 col_idx += 1
                 
-                # Icy Rings (read-only checkbox) - checkbox only, center-aligned
+                # Icy Rings (read-only indicator) - colored dot, center-aligned
                 icy_rings_width = column_widths[col_idx] if col_idx < len(column_widths) else 20
                 icy_rings_str = str(icy_rings).strip().lower() if icy_rings else ''
                 icy_rings_value = icy_rings_str == 'yes'
-                icy_rings_var = tk.BooleanVar(value=icy_rings_value)
-                icy_rings_cb = tk.Checkbutton(table_frame, variable=icy_rings_var, state=tk.DISABLED, text="", width=icy_rings_width, bg=row_bg)
-                icy_rings_cb.grid(row=data_row, column=col_idx*2, padx=2, pady=5, sticky=tk.EW)
+                icy_rings_canvas = tk.Canvas(table_frame, width=20, height=20, highlightthickness=0, bg=row_bg)
+                icy_rings_canvas.grid(row=data_row, column=col_idx*2, padx=2, pady=5, sticky=tk.EW)
+                if icy_rings_value:
+                    icy_rings_canvas.create_oval(5, 5, 15, 15, fill="red", outline="darkred", width=1)
+                else:
+                    icy_rings_canvas.create_oval(5, 5, 15, 15, fill=row_bg, outline="lightgray", width=1)
                 if col_idx < len(headers) - 1:
                     separator9 = ttk.Separator(table_frame, orient=tk.VERTICAL)
                     separator9.grid(row=data_row, column=col_idx*2+1, padx=0, pady=2, sticky=tk.NS)
                 col_idx += 1
                 
-                # Pristine (read-only checkbox) - checkbox only, center-aligned
+                # Pristine (read-only indicator) - colored dot, center-aligned
                 pristine_width = column_widths[col_idx] if col_idx < len(column_widths) else 20
                 pristine_str = str(pristine).strip().lower() if pristine else ''
                 pristine_value = pristine_str == 'yes'
-                pristine_var = tk.BooleanVar(value=pristine_value)
-                pristine_cb = tk.Checkbutton(table_frame, variable=pristine_var, state=tk.DISABLED, text="", width=pristine_width, bg=row_bg)
-                pristine_cb.grid(row=data_row, column=col_idx*2, padx=2, pady=5, sticky=tk.EW)
+                pristine_canvas = tk.Canvas(table_frame, width=20, height=20, highlightthickness=0, bg=row_bg)
+                pristine_canvas.grid(row=data_row, column=col_idx*2, padx=2, pady=5, sticky=tk.EW)
+                if pristine_value:
+                    pristine_canvas.create_oval(5, 5, 15, 15, fill="red", outline="darkred", width=1)
+                else:
+                    pristine_canvas.create_oval(5, 5, 15, 15, fill=row_bg, outline="lightgray", width=1)
                 if col_idx < len(headers) - 1:
                     separator10 = ttk.Separator(table_frame, orient=tk.VERTICAL)
                     separator10.grid(row=data_row, column=col_idx*2+1, padx=0, pady=2, sticky=tk.NS)
                 col_idx += 1
                 
-                # Docking Access (read-only checkbox) - checkbox only, center-aligned
+                # Docking Access (read-only indicator) - colored dot, center-aligned
                 docking_access_width = column_widths[col_idx] if col_idx < len(column_widths) else 20
                 docking_access_str = str(docking_access).strip().lower() if docking_access else ''
                 docking_access_value = docking_access_str in ['yes', 'all', 'friends', 'squadron']
-                docking_access_var = tk.BooleanVar(value=docking_access_value)
-                docking_access_cb = tk.Checkbutton(table_frame, variable=docking_access_var, state=tk.DISABLED, text="", width=docking_access_width, bg=row_bg)
-                docking_access_cb.grid(row=data_row, column=col_idx*2, padx=2, pady=5, sticky=tk.EW)
+                docking_access_canvas = tk.Canvas(table_frame, width=20, height=20, highlightthickness=0, bg=row_bg)
+                docking_access_canvas.grid(row=data_row, column=col_idx*2, padx=2, pady=5, sticky=tk.EW)
+                if docking_access_value:
+                    docking_access_canvas.create_oval(5, 5, 15, 15, fill="red", outline="darkred", width=1)
+                else:
+                    docking_access_canvas.create_oval(5, 5, 15, 15, fill=row_bg, outline="lightgray", width=1)
                 if col_idx < len(headers) - 1:
                     separator11 = ttk.Separator(table_frame, orient=tk.VERTICAL)
                     separator11.grid(row=data_row, column=col_idx*2+1, padx=0, pady=2, sticky=tk.NS)
                 col_idx += 1
                 
-                # Notorious Access (read-only checkbox) - checkbox only, center-aligned
+                # Notorious Access (read-only indicator) - colored dot, center-aligned
                 notorious_access_width = column_widths[col_idx] if col_idx < len(column_widths) else 20
                 if isinstance(notorious_access, str):
                     notorious_access_str = notorious_access.strip().lower()
                     notorious_access_value = notorious_access_str in ['true', 'yes', '1']
                 else:
                     notorious_access_value = bool(notorious_access) if notorious_access else False
-                notorious_access_var = tk.BooleanVar(value=notorious_access_value)
-                notorious_access_cb = tk.Checkbutton(table_frame, variable=notorious_access_var, state=tk.DISABLED, text="", width=notorious_access_width, bg=row_bg)
-                notorious_access_cb.grid(row=data_row, column=col_idx*2, padx=2, pady=5, sticky=tk.EW)
+                notorious_access_canvas = tk.Canvas(table_frame, width=20, height=20, highlightthickness=0, bg=row_bg)
+                notorious_access_canvas.grid(row=data_row, column=col_idx*2, padx=2, pady=5, sticky=tk.EW)
+                if notorious_access_value:
+                    notorious_access_canvas.create_oval(5, 5, 15, 15, fill="red", outline="darkred", width=1)
+                else:
+                    notorious_access_canvas.create_oval(5, 5, 15, 15, fill=row_bg, outline="lightgray", width=1)
                 if col_idx < len(headers) - 1:
                     separator12 = ttk.Separator(table_frame, orient=tk.VERTICAL)
                     separator12.grid(row=data_row, column=col_idx*2+1, padx=0, pady=2, sticky=tk.NS)
@@ -3021,13 +3048,21 @@ class SpanshRouter():
                         def get_field(row, field_name, default=""):
                             """Get field value from row using case-insensitive lookup"""
                             key = fieldname_map.get(field_name.lower(), field_name)
-                            return row.get(key, default)
+                            value = row.get(key, default)
+                            # Convert None, "None", or empty strings to empty string
+                            if value is None or str(value).strip().lower() == 'none':
+                                return default
+                            return value
                         
                         # Read all rows and store all fields
                         for row in reader:
                             route_entry = {}
                             for field_name in fieldnames:
-                                route_entry[field_name.lower()] = get_field(row, field_name, '')
+                                field_value = get_field(row, field_name, '')
+                                # Convert None, "None", or empty strings to empty string for display
+                                if field_value is None or str(field_value).strip().lower() == 'none':
+                                    field_value = ''
+                                route_entry[field_name.lower()] = field_value
                             route_data.append(route_entry)
                 except Exception:
                     logger.warning('!! Error reading route CSV for display: ' + traceback.format_exc(), exc_info=False)
@@ -3047,6 +3082,16 @@ class SpanshRouter():
             # Check for Road to Riches by looking for Body Name column
             if not self.roadtoriches and 'body name' in fieldname_map:
                 self.roadtoriches = True
+            
+            # Detect Fleet Carrier route if not already set (check for Restock Tritium or Icy Ring)
+            if not self.fleetcarrier:
+                if 'restock tritium' in fieldname_map or 'icy ring' in fieldname_map or 'pristine' in fieldname_map:
+                    self.fleetcarrier = True
+            
+            # Detect Galaxy route if not already set (check for Refuel column)
+            if not self.galaxy:
+                if 'refuel' in fieldname_map and self.system_header.lower() in fieldname_map:
+                    self.galaxy = True
             
             # Define columns to exclude based on route type
             exclude_columns = set()
@@ -3076,9 +3121,16 @@ class SpanshRouter():
                 if 'is terraformable' in fieldname_map:
                     checkbox_columns.add('is terraformable')
             
-            # Neutron routes: Neutron Star is checkbox (if not galaxy and has Neutron Star column)
-            if not self.fleetcarrier and not self.galaxy and not self.roadtoriches:
-                # Check if this might be a neutron route (has Neutron Star column)
+            # Neutron Star checkbox: Add for any route type that has this column (except fleet carrier)
+            # This ensures Neutron Star shows up for galaxy routes, neutron routes, and any other route type
+            if not self.fleetcarrier and 'neutron star' in fieldname_map:
+                checkbox_columns.add('neutron star')
+            
+            # Also detect galaxy route type from CSV if not already set
+            if not self.galaxy and 'refuel' in fieldname_map and self.system_header.lower() in fieldname_map:
+                self.galaxy = True
+                if 'refuel' in fieldname_map:
+                    checkbox_columns.add('refuel')
                 if 'neutron star' in fieldname_map:
                     checkbox_columns.add('neutron star')
             
@@ -3208,7 +3260,7 @@ class SpanshRouter():
                     anchor = "c"
                     sticky_val = tk.EW
                 elif header_lower in checkbox_columns:
-                    anchor = "c"  # Center-align for checkbox columns
+                    anchor = "c"  # Center-align for indicator columns (colored dots)
                     sticky_val = tk.EW  # Expand to fill column width for centering
                 elif header_lower in numeric_columns:
                     anchor = "e"  # Right-align for numeric columns
@@ -3246,7 +3298,12 @@ class SpanshRouter():
                 # Note: We iterate through display_columns but need to account for EDSM column before System Name
                 for field_idx, field_name in enumerate(display_columns):
                     field_lower = field_name.lower()
-                    value = route_entry.get(field_lower, '').strip() if isinstance(route_entry.get(field_lower, ''), str) else str(route_entry.get(field_lower, ''))
+                    raw_value = route_entry.get(field_lower, '')
+                    # Convert to string and handle None/"None" values
+                    if raw_value is None or str(raw_value).strip().lower() == 'none':
+                        value = ''
+                    else:
+                        value = str(raw_value).strip() if isinstance(raw_value, str) else str(raw_value)
                     
                     # Special handling: Add EDSM button before System Name
                     if field_lower == self.system_header.lower():
@@ -3321,24 +3378,48 @@ class SpanshRouter():
                     # Apply same width cap as headers
                     col_width = min(col_width, 30) if col_idx > 0 else col_width
                     
-                    # Checkbox columns (yes/no fields) - checkbox only, no text, center-aligned
+                    # Checkbox columns (yes/no fields) - display as colored dot indicator
                     if field_lower in checkbox_columns:
                         # Strip whitespace and convert to lowercase for comparison
                         checkbox_value_str = str(value).strip().lower() if value else ''
                         checkbox_value = checkbox_value_str == 'yes'
-                        checkbox_var = tk.BooleanVar(value=checkbox_value)
-                        # Checkbox with no text, center-aligned in column
-                        checkbox_cb = tk.Checkbutton(table_frame, variable=checkbox_var, state=tk.DISABLED, text="", width=col_width, bg=row_bg)
-                        checkbox_cb.grid(row=data_row, column=col_idx*2, padx=2, pady=5, sticky=tk.EW)
+                        
+                        # Create a canvas to draw a colored dot (red for "yes", empty for "no")
+                        checkbox_canvas = tk.Canvas(table_frame, width=20, height=20, highlightthickness=0, bg=row_bg)
+                        checkbox_canvas.grid(row=data_row, column=col_idx*2, padx=2, pady=5, sticky=tk.EW)
+                        
+                        if checkbox_value:
+                            # Draw a red filled circle for "yes"
+                            checkbox_canvas.create_oval(5, 5, 15, 15, fill="red", outline="darkred", width=1)
+                        else:
+                            # Draw an empty circle for "no" (or leave blank)
+                            checkbox_canvas.create_oval(5, 5, 15, 15, fill=row_bg, outline="lightgray", width=1)
                     
                     # Regular text columns - right-align numeric columns, left-align others
                     else:
                         # Determine if this is a numeric column
                         is_numeric = field_lower in numeric_columns
+                        
+                        # Process the value - handle None, "None", empty strings
+                        display_value = value if value else ""
+                        if display_value is None or str(display_value).strip().lower() == 'none':
+                            display_value = ""
+                        
+                        # Round distance columns UP to nearest hundredth if they're numeric
+                        if is_numeric and field_lower in ["distance to arrival", "distance remaining", "distance"]:
+                            if display_value:  # Only process if not empty
+                                try:
+                                    val_float = float(display_value)
+                                    # Round UP to nearest hundredth: multiply by 100, ceil, divide by 100
+                                    rounded = math.ceil(val_float * 100) / 100
+                                    display_value = f"{rounded:.2f}"
+                                except (ValueError, TypeError):
+                                    pass  # Keep original value if not a number
+                        
                         anchor = "e" if is_numeric else "w"
                         sticky = tk.E if is_numeric else tk.W
                         # Use col_width which now matches header width calculation exactly
-                        tk.Label(table_frame, text=value if value else "", width=col_width, anchor=anchor, bg=row_bg).grid(row=data_row, column=col_idx*2, padx=2, pady=5, sticky=sticky)
+                        tk.Label(table_frame, text=display_value, width=col_width, anchor=anchor, bg=row_bg).grid(row=data_row, column=col_idx*2, padx=2, pady=5, sticky=sticky)
                     
                     # Add separator after each column (except the last)
                     if col_idx < len(headers) - 1:
