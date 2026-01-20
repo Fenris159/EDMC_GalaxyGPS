@@ -50,7 +50,10 @@ class SpanshRouter():
         self.galaxy = False
         self.next_stop = "No route planned"
         self.route = []
+        self.route_full_data = []  # Store full CSV row data to preserve all columns
+        self.route_fieldnames = []  # Original CSV fieldnames (preserved for display)
         self.next_wp_label = "Next waypoint: "
+        self.route_window_ref = None  # Reference to open route window for dynamic updates
         self.jumpcountlbl_txt = "Estimated jumps left: "
         self.bodieslbl_txt = "Bodies to scan at: "
         self.fleetstocklbl_txt = "Warning: Restock Tritium"
@@ -61,6 +64,7 @@ class SpanshRouter():
         self.save_route_path = os.path.join(plugin_dir, 'route.csv')
         self.export_route_path = os.path.join(plugin_dir, 'Export for TCE.exp')
         self.offset_file_path = os.path.join(plugin_dir, 'offset')
+        self.original_csv_path = None  # Store path to original CSV file to preserve all columns
         self.offset = 0
         self.jumps_left = 0
         self.error_txt = tk.StringVar()
@@ -1203,6 +1207,8 @@ class SpanshRouter():
                 ftype_supported = False
                 if filename.endswith(".csv"):
                     ftype_supported = True
+                    # Store the original CSV path so we can read all columns later
+                    self.original_csv_path = filename
                     self.plot_csv(filename)
 
                 elif filename.endswith(".txt"):
@@ -1223,7 +1229,10 @@ class SpanshRouter():
                     # Check fleet carrier restock warning
                     if self.fleetcarrier and hasattr(self, 'check_fleet_carrier_restock_warning'):
                         self.check_fleet_carrier_restock_warning()
-                    self.save_all_route()
+                    # Only save route if we don't have an original CSV to preserve (for non-fleet-carrier routes)
+                    # For fleet carrier routes, we still save because they're processed differently
+                    if not self.original_csv_path or self.fleetcarrier:
+                        self.save_all_route()
                 else:
                     self.show_error("Unsupported file type")
             except Exception:
@@ -1243,6 +1252,10 @@ class SpanshRouter():
 
             route_reader = csv.DictReader(csvfile)
             fieldnames = route_reader.fieldnames if route_reader.fieldnames else []
+            
+            # Store full CSV data for View Route window (preserve all columns)
+            self.route_full_data = []
+            self.route_fieldnames = fieldnames  # Preserve original fieldnames for display
             
             # Create case-insensitive fieldname mapping
             fieldname_map = {name.lower(): name for name in fieldnames}
@@ -1292,6 +1305,13 @@ class SpanshRouter():
             if headerline_lower == neutronimportheader.lower():
                 for row in route_reader:
                     if row not in (None, "", []):
+                        # Store full row data (all columns)
+                        full_row_data = {}
+                        for field_name in fieldnames:
+                            full_row_data[field_name.lower()] = get_field(row, field_name, '')
+                        self.route_full_data.append(full_row_data)
+                        
+                        # Store minimal route data for route planner
                         dist_to_arrival, dist_remaining = get_distance_fields(row)
                         self.route.append([
                             get_field(row, self.system_header),
@@ -1309,6 +1329,13 @@ class SpanshRouter():
             elif headerline_lower in (internalbasicheader1.lower(), internalbasicheader2.lower()):
                 for row in route_reader:
                     if row not in (None, "", []):
+                        # Store full row data (all columns)
+                        full_row_data = {}
+                        for field_name in fieldnames:
+                            full_row_data[field_name.lower()] = get_field(row, field_name, '')
+                        self.route_full_data.append(full_row_data)
+                        
+                        # Store minimal route data for route planner
                         self.route.append([
                             get_field(row, self.system_header),
                             get_field(row, self.jumps_header, "")
@@ -1325,6 +1352,13 @@ class SpanshRouter():
 
                 for row in route_reader:
                     if row not in (None, "", []):
+                        # Store full row data (all columns)
+                        full_row_data = {}
+                        for field_name in fieldnames:
+                            full_row_data[field_name.lower()] = get_field(row, field_name, '')
+                        self.route_full_data.append(full_row_data)
+                        
+                        # Store minimal route data for route planner
                         dist_to_arrival, dist_remaining = get_distance_fields(row)
                         self.route.append([
                             get_field(row, self.system_header),
@@ -1345,6 +1379,13 @@ class SpanshRouter():
 
                 for row in route_reader:
                     if row not in (None, "", []):
+                        # Store full row data (all columns)
+                        full_row_data = {}
+                        for field_name in fieldnames:
+                            full_row_data[field_name.lower()] = get_field(row, field_name, '')
+                        self.route_full_data.append(full_row_data)
+                        
+                        # Store minimal route data for route planner
                         self.route.append([
                             get_field(row, self.system_header),
                             get_field(row, self.jumps_header),
@@ -1363,6 +1404,23 @@ class SpanshRouter():
 
                 for row in route_reader:
                     if row not in (None, "", []):
+                        # Store full row data (all columns)
+                        full_row_data = {}
+                        for field_name in fieldnames:
+                            field_value = get_field(row, field_name, '')
+                            # Round distance values if present
+                            if field_name.lower() in ["distance to arrival", "distance remaining", "distance"]:
+                                if field_value:
+                                    try:
+                                        val = float(field_value)
+                                        rounded_val = math.ceil(val * 100) / 100
+                                        field_value = f"{rounded_val:.2f}"
+                                    except (ValueError, TypeError):
+                                        pass
+                            full_row_data[field_name.lower()] = field_value
+                        self.route_full_data.append(full_row_data)
+                        
+                        # Store minimal route data for route planner
                         dist_to_arrival, dist_remaining = get_distance_fields(row)
 
                         route_entry = [
@@ -1400,6 +1458,23 @@ class SpanshRouter():
 
                 for row in route_reader:
                     if row not in (None, "", []):
+                        # Store full row data (all columns)
+                        full_row_data = {}
+                        for field_name in fieldnames:
+                            field_value = get_field(row, field_name, '')
+                            # Round distance values if present
+                            if field_name.lower() in ["distance to arrival", "distance remaining", "distance"]:
+                                if field_value:
+                                    try:
+                                        val = float(field_value)
+                                        rounded_val = math.ceil(val * 100) / 100
+                                        field_value = f"{rounded_val:.2f}"
+                                    except (ValueError, TypeError):
+                                        pass
+                            full_row_data[field_name.lower()] = field_value
+                        self.route_full_data.append(full_row_data)
+                        
+                        # Store minimal route data for route planner
                         dist_to_arrival, dist_remaining = get_distance_fields(row)
 
                         route_row = [
@@ -1439,6 +1514,23 @@ class SpanshRouter():
                 
                 for row in route_reader:
                     if row not in (None, "", []):
+                        # Store full row data (all columns) - preserve everything
+                        full_row_data = {}
+                        for field_name in fieldnames:
+                            field_value = get_field(row, field_name, '')
+                            # Round distance values if present
+                            if field_name.lower() in ["distance to arrival", "distance remaining", "distance"]:
+                                if field_value:
+                                    try:
+                                        val = float(field_value)
+                                        rounded_val = math.ceil(val * 100) / 100
+                                        field_value = f"{rounded_val:.2f}"
+                                    except (ValueError, TypeError):
+                                        pass
+                            full_row_data[field_name.lower()] = field_value
+                        self.route_full_data.append(full_row_data)
+                        
+                        # Store minimal route data for route planner
                         system = get_field(row, self.system_header, "")
                         jumps = get_field(row, self.jumps_header, "")
                         route_entry = [system, jumps]
@@ -1621,6 +1713,9 @@ class SpanshRouter():
                 self.clear_route(show_dialog=False)
 
                 # Fill route with distance-aware entries (API plot)
+                # Also store full data for View Route window
+                self.route_full_data = []
+                self.route_fieldnames = ['System Name', 'Jumps', 'Distance To Arrival', 'Distance Remaining']  # Standard Spansh API columns
                 for waypoint in route:
                     system = waypoint.get("system", "")
                     jumps = waypoint.get("jumps", 0)
@@ -1644,12 +1739,31 @@ class SpanshRouter():
                     distance_to_arrival = round_distance(distance_to_arrival_raw)
                     distance_remaining = round_distance(distance_remaining_raw)
 
+                    # Store minimal route data for route planner
                     self.route.append([
                         system,
                         str(jumps),
                         distance_to_arrival,
                         distance_remaining
                     ])
+                    
+                    # Store full data for View Route window (all API fields)
+                    full_row_data = {
+                        'system name': system,
+                        'jumps': str(jumps),
+                        'distance to arrival': distance_to_arrival,
+                        'distance remaining': distance_remaining
+                    }
+                    # Include any other fields from API response
+                    for key, value in waypoint.items():
+                        if key not in ['system', 'jumps', 'distance_jumped', 'distance_left']:
+                            field_name = key.lower().replace('_', ' ')
+                            full_row_data[field_name] = str(value) if value else ''
+                            # Add to fieldnames if not already present
+                            display_name = key.replace('_', ' ').title()
+                            if display_name not in self.route_fieldnames:
+                                self.route_fieldnames.append(display_name)
+                    self.route_full_data.append(full_row_data)
 
                     try:
                         self.jumps_left += int(jumps)
@@ -1678,6 +1792,8 @@ class SpanshRouter():
                 self.compute_distances()
                 self.copy_waypoint()
                 self.update_gui()
+                # Refresh route window if open to update highlight
+                self.refresh_route_window_if_open()
                 # Check fleet carrier restock warning
                 if self.fleetcarrier and hasattr(self, 'check_fleet_carrier_restock_warning'):
                     self.check_fleet_carrier_restock_warning()
@@ -1764,11 +1880,14 @@ class SpanshRouter():
         if clear:
             self.offset = 0
             self.route = []
+            self.route_full_data = []  # Clear full CSV data
+            self.route_fieldnames = []  # Clear fieldnames
             self.next_waypoint = ""
             self.jumps_left = 0
             self.roadtoriches = False
             self.fleetcarrier = False
             self.galaxy = False
+            self.original_csv_path = None  # Clear original CSV path reference
             try:
                 os.remove(self.save_route_path)
             except (IOError, OSError):
@@ -3025,18 +3144,39 @@ class SpanshRouter():
         Open a window displaying the current route as an easy-to-read list.
         System names are hyperlinked to Inara.cz.
         Shows all columns based on route type with checkboxes for yes/no fields.
+        Highlights the current next waypoint row.
         """
         try:
             if not self.route or len(self.route) == 0:
                 confirmDialog.showinfo("View Route", "No route is currently loaded.")
                 return
             
-            # Read the saved CSV file to get all column data
+            # If window is already open, close it first to refresh
+            if self.route_window_ref:
+                try:
+                    self.route_window_ref.destroy()
+                except:
+                    pass
+                self.route_window_ref = None
+            
+            # Use stored full CSV data if available (more efficient than reading file)
             route_data = []
             fieldnames = []
             fieldname_map = {}
             
-            if os.path.exists(self.save_route_path):
+            if self.route_full_data and len(self.route_full_data) > 0:
+                # Use in-memory full data (preserves all columns from original CSV)
+                route_data = self.route_full_data
+                # Use preserved original fieldnames if available
+                if self.route_fieldnames:
+                    fieldnames = self.route_fieldnames
+                    fieldname_map = {name.lower(): name for name in fieldnames}
+                elif route_data:
+                    # Fallback: extract from first row keys (will be lowercase)
+                    fieldnames = list(route_data[0].keys())
+                    fieldname_map = {name.lower(): name for name in fieldnames}
+            elif os.path.exists(self.save_route_path):
+                # Fallback: read from saved CSV file
                 try:
                     with open(self.save_route_path, 'r', encoding='utf-8-sig', newline='') as csvfile:
                         reader = csv.DictReader(csvfile)
@@ -3069,8 +3209,7 @@ class SpanshRouter():
                     confirmDialog.showerror("Error", "Failed to read route CSV file.")
                     return
             else:
-                # Fallback: create route data from in-memory route structure
-                # This is less ideal but better than nothing
+                # No data available
                 confirmDialog.showwarning("Route File Not Found", "Route CSV file not found. Please import the route again.")
                 return
             
@@ -3135,13 +3274,23 @@ class SpanshRouter():
                     checkbox_columns.add('neutron star')
             
             # Build list of columns to display
+            # Use original fieldnames if available
             display_columns = []
-            for field in fieldnames:
-                field_lower = field.lower()
-                # Always exclude excluded columns
-                if field_lower in exclude_columns:
-                    continue
-                display_columns.append(field)
+            if fieldnames:
+                # Use original fieldnames from CSV header
+                for field in fieldnames:
+                    field_lower = field.lower()
+                    # Always exclude excluded columns
+                    if field_lower in exclude_columns:
+                        continue
+                    display_columns.append(field)
+            elif route_data and len(route_data) > 0:
+                # Fallback: use keys from first route entry (convert back to title case if possible)
+                for key in route_data[0].keys():
+                    if key not in exclude_columns:
+                        # Convert key back to title case for display (e.g., "system name" -> "System Name")
+                        display_name = key.replace('_', ' ').title()
+                        display_columns.append(display_name)
             
             # For Road to Riches, track previous system name to avoid repetition
             prev_system_name = None
@@ -3149,6 +3298,17 @@ class SpanshRouter():
             # Create new window
             route_window = tk.Toplevel(self.parent)
             route_window.title("Route View")
+            
+            # Store reference to this window for dynamic updates
+            self.route_window_ref = route_window
+            
+            # Clean up reference when window is closed
+            def on_window_close():
+                if self.route_window_ref == route_window:
+                    self.route_window_ref = None
+                route_window.destroy()
+            
+            route_window.protocol("WM_DELETE_WINDOW", on_window_close)
             
             # Create main container with horizontal and vertical scrolling
             main_frame = tk.Frame(route_window, bg="white")
@@ -3276,11 +3436,41 @@ class SpanshRouter():
                     separator = ttk.Separator(table_frame, orient=tk.VERTICAL)
                     separator.grid(row=header_row, column=i*2+1, padx=0, pady=2, sticky=tk.NS)
             
+            # Get current next waypoint system name for highlighting
+            current_next_waypoint = getattr(self, 'next_stop', None)
+            if current_next_waypoint and current_next_waypoint == "No route planned":
+                current_next_waypoint = None
+            
             # Route data rows (rows 1+) - use same grid as header for perfect alignment
             for idx, route_entry in enumerate(route_data):
                 data_row = idx + 1  # Start from row 1 (row 0 is header)
-                # Alternate row background color
-                row_bg = "white" if idx % 2 == 0 else "#f0f0f0"
+                
+                # Get system name from this row for comparison
+                # For Road to Riches, we need to track the actual system name even if it's not displayed
+                system_name_in_row = None
+                system_field_lower = self.system_header.lower()
+                if system_field_lower in route_entry:
+                    system_name_in_row = route_entry.get(system_field_lower, '').strip()
+                
+                # For Road to Riches, if system name is empty in this row, use previous system name
+                if self.roadtoriches and not system_name_in_row and idx > 0:
+                    # Check previous entry for system name
+                    prev_entry = route_data[idx - 1]
+                    if system_field_lower in prev_entry:
+                        system_name_in_row = prev_entry.get(system_field_lower, '').strip()
+                
+                # Check if this row matches the current next waypoint
+                is_current_waypoint = False
+                if current_next_waypoint and system_name_in_row:
+                    # Case-insensitive comparison
+                    if system_name_in_row.lower() == current_next_waypoint.lower():
+                        is_current_waypoint = True
+                
+                # Alternate row background color, but highlight current waypoint
+                if is_current_waypoint:
+                    row_bg = "#fff9c4"  # Light yellow highlight for current waypoint
+                else:
+                    row_bg = "white" if idx % 2 == 0 else "#f0f0f0"
                 
                 col_idx = 0
                 
@@ -3298,6 +3488,7 @@ class SpanshRouter():
                 # Note: We iterate through display_columns but need to account for EDSM column before System Name
                 for field_idx, field_name in enumerate(display_columns):
                     field_lower = field_name.lower()
+                    # Get value from route_entry (which uses lowercase keys)
                     raw_value = route_entry.get(field_lower, '')
                     # Convert to string and handle None/"None" values
                     if raw_value is None or str(raw_value).strip().lower() == 'none':
@@ -3384,13 +3575,22 @@ class SpanshRouter():
                         checkbox_value_str = str(value).strip().lower() if value else ''
                         checkbox_value = checkbox_value_str == 'yes'
                         
-                        # Create a canvas to draw a colored dot (red for "yes", empty for "no")
+                        # Determine dot color based on field type
+                        # Neutron Star uses light blue, others use red
+                        if field_lower == 'neutron star':
+                            dot_color = "lightblue"
+                            dot_outline = "blue"
+                        else:
+                            dot_color = "red"
+                            dot_outline = "darkred"
+                        
+                        # Create a canvas to draw a colored dot
                         checkbox_canvas = tk.Canvas(table_frame, width=20, height=20, highlightthickness=0, bg=row_bg)
                         checkbox_canvas.grid(row=data_row, column=col_idx*2, padx=2, pady=5, sticky=tk.EW)
                         
                         if checkbox_value:
-                            # Draw a red filled circle for "yes"
-                            checkbox_canvas.create_oval(5, 5, 15, 15, fill="red", outline="darkred", width=1)
+                            # Draw a filled circle for "yes" (light blue for neutron star, red for others)
+                            checkbox_canvas.create_oval(5, 5, 15, 15, fill=dot_color, outline=dot_outline, width=1)
                         else:
                             # Draw an empty circle for "no" (or leave blank)
                             checkbox_canvas.create_oval(5, 5, 15, 15, fill=row_bg, outline="lightgray", width=1)
@@ -3449,12 +3649,27 @@ class SpanshRouter():
             # Close button (outside scrollable area)
             close_btn_frame = tk.Frame(route_window, bg="white")
             close_btn_frame.pack(pady=5)
-            close_btn = tk.Button(close_btn_frame, text="Close", command=route_window.destroy)
+            close_btn = tk.Button(close_btn_frame, text="Close", command=on_window_close)
             close_btn.pack()
             
         except Exception:
             logger.warning('!! Error showing route window: ' + traceback.format_exc(), exc_info=False)
             confirmDialog.showerror("Error", "Failed to display route.")
+    
+    def refresh_route_window_if_open(self):
+        """
+        Refresh the route window if it's currently open.
+        This is called when the next waypoint changes to update the highlight.
+        """
+        if self.route_window_ref:
+            try:
+                # Check if window still exists
+                self.route_window_ref.winfo_exists()
+                # Reopen the window to refresh highlights
+                self.show_route_window()
+            except:
+                # Window was closed, clear reference
+                self.route_window_ref = None
     
     def update_fleet_carrier_status(self):
         """
