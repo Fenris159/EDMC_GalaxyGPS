@@ -245,23 +245,37 @@ class SpanshRouter():
             # Get frame background color to match EDMC theme
             frame_bg = self.frame.cget('bg')
             
+            # Determine background color - use frame background or fallback to dark color
+            # EDMC dark theme typically uses a dark gray/black background
+            if frame_bg and frame_bg.lower() not in ['white', '#ffffff', 'systemwindow', 'systembuttonface']:
+                bg_color = frame_bg
+            else:
+                # Use a dark color that matches EDMC's dark theme
+                bg_color = '#1e1e1e'  # Dark gray/black typical of EDMC dark theme
+            
             # Create and configure style for the combobox
             combobox_style = ttk.Style()
             # Configure the Combobox style to match EDMC dark theme with orange text
             combobox_style.configure(
                 'FleetCarrier.TCombobox',
-                fieldbackground=frame_bg,  # Match frame background (transparent-like)
-                background=frame_bg,
+                fieldbackground=bg_color,  # Match EDMC dark theme background
+                background=bg_color,  # Background of the combobox
                 foreground='orange',  # Orange text to match rest of program
                 borderwidth=1,
-                relief='solid'
+                relief='solid',
+                arrowcolor='orange',  # Orange dropdown arrow
+                selectbackground=bg_color,  # Background when item is selected
+                selectforeground='orange'  # Text color when item is selected
             )
-            # Configure the dropdown arrow button
+            # Configure the dropdown arrow button and readonly state
             combobox_style.map(
                 'FleetCarrier.TCombobox',
-                fieldbackground=[('readonly', frame_bg)],
-                background=[('readonly', frame_bg)],
-                foreground=[('readonly', 'orange')]
+                fieldbackground=[('readonly', bg_color), ('!readonly', bg_color)],
+                background=[('readonly', bg_color), ('!readonly', bg_color)],
+                foreground=[('readonly', 'orange'), ('!readonly', 'orange')],
+                arrowcolor=[('readonly', 'orange'), ('!readonly', 'orange')],
+                selectbackground=[('readonly', bg_color), ('!readonly', bg_color)],
+                selectforeground=[('readonly', 'orange'), ('!readonly', 'orange')]
             )
             
             self.fleet_carrier_combobox = ttk.Combobox(
@@ -272,6 +286,24 @@ class SpanshRouter():
                 style='FleetCarrier.TCombobox'
             )
             self.fleet_carrier_combobox.bind("<<ComboboxSelected>>", self.on_carrier_selected)
+            
+            # Style the dropdown listbox popup window when it opens
+            # This is done by binding to the combobox's postcommand to style the popup
+            def style_dropdown():
+                """Style the combobox dropdown list when it opens"""
+                try:
+                    # Use a small delay to ensure the popup window is created
+                    self.parent.after(50, lambda: self._style_combobox_popup(bg_color))
+                except:
+                    pass  # Silently fail if styling can't be applied
+            
+            # Bind to postcommand to style the dropdown list when it opens
+            original_postcommand = self.fleet_carrier_combobox.cget('postcommand') if self.fleet_carrier_combobox.cget('postcommand') else None
+            def combined_postcommand():
+                if original_postcommand:
+                    original_postcommand()
+                style_dropdown()
+            self.fleet_carrier_combobox.configure(postcommand=combined_postcommand)
             self.fleet_carrier_details_btn = tk.Button(
                 self.frame, 
                 text="View All", 
@@ -583,7 +615,8 @@ class SpanshRouter():
     def _draw_icy_rings_toggle(self):
         """
         Draw the circular toggle button for Icy Rings (read-only display).
-        Shows filled circle when checked, empty circle when unchecked.
+        Shows filled orange circle when checked, empty circle when unchecked.
+        Updates label color: orange when checked, gray when unchecked.
         """
         if not hasattr(self, 'fleet_carrier_icy_rings_canvas'):
             return
@@ -602,28 +635,36 @@ class SpanshRouter():
                 bg_color = "white"
             
             # Draw outer circle (always visible)
+            # Use orange outline when checked, gray when unchecked
+            outline_color = "orange" if is_checked else "gray"
             self.fleet_carrier_icy_rings_canvas.create_oval(
                 2, 2, 18, 18,
-                outline="gray",
+                outline=outline_color,
                 width=2,
-                fill=bg_color if not is_checked else "gray"
+                fill=bg_color if not is_checked else "orange"
             )
             
-            # If checked, draw inner filled circle
+            # If checked, draw inner filled circle in orange
             if is_checked:
                 self.fleet_carrier_icy_rings_canvas.create_oval(
                     6, 6, 14, 14,
-                    outline="gray",
-                    fill="gray",
+                    outline="darkorange",
+                    fill="orange",
                     width=1
                 )
+            
+            # Update label color: orange when checked, gray when unchecked
+            if hasattr(self, 'fleet_carrier_icy_rings_label'):
+                label_color = "orange" if is_checked else "gray"
+                self.fleet_carrier_icy_rings_label.config(foreground=label_color)
         except Exception:
             pass
     
     def _draw_pristine_toggle(self):
         """
         Draw the circular toggle button for Pristine (read-only display).
-        Shows filled circle when checked, empty circle when unchecked.
+        Shows filled orange circle when checked, empty circle when unchecked.
+        Updates label color: orange when checked, gray when unchecked.
         """
         if not hasattr(self, 'fleet_carrier_pristine_canvas'):
             return
@@ -642,21 +683,28 @@ class SpanshRouter():
                 bg_color = "white"
             
             # Draw outer circle (always visible)
+            # Use orange outline when checked, gray when unchecked
+            outline_color = "orange" if is_checked else "gray"
             self.fleet_carrier_pristine_canvas.create_oval(
                 2, 2, 18, 18,
-                outline="gray",
+                outline=outline_color,
                 width=2,
-                fill=bg_color if not is_checked else "gray"
+                fill=bg_color if not is_checked else "orange"
             )
             
-            # If checked, draw inner filled circle
+            # If checked, draw inner filled circle in orange
             if is_checked:
                 self.fleet_carrier_pristine_canvas.create_oval(
                     6, 6, 14, 14,
-                    outline="gray",
-                    fill="gray",
+                    outline="darkorange",
+                    fill="orange",
                     width=1
                 )
+            
+            # Update label color: orange when checked, gray when unchecked
+            if hasattr(self, 'fleet_carrier_pristine_label'):
+                label_color = "orange" if is_checked else "gray"
+                self.fleet_carrier_pristine_label.config(foreground=label_color)
         except Exception:
             pass
 
@@ -2345,6 +2393,50 @@ class SpanshRouter():
         except Exception:
             logger.warning('!! Error handling carrier selection: ' + traceback.format_exc(), exc_info=False)
     
+    def _style_combobox_popup(self, bg_color):
+        """
+        Style the combobox dropdown popup window to match EDMC dark theme.
+        
+        Args:
+            bg_color: Background color to use for the dropdown
+        """
+        try:
+            # Get the popup window (Toplevel) that contains the listbox
+            # The popup is typically a child of the root window
+            root = self.parent.winfo_toplevel()
+            # Find the popup window (it's usually the most recent Toplevel)
+            for widget in root.winfo_children():
+                if isinstance(widget, tk.Toplevel) and widget.winfo_viewable():
+                    # Style the popup window itself
+                    widget.config(bg=bg_color)
+                    # Find the Listbox within the popup
+                    for child in widget.winfo_children():
+                        if isinstance(child, tk.Listbox):
+                            child.config(
+                                bg=bg_color,
+                                fg='orange',
+                                selectbackground=bg_color,
+                                selectforeground='orange',
+                                highlightbackground=bg_color,
+                                highlightcolor='orange'
+                            )
+                        # Also style any Frame containers
+                        elif isinstance(child, tk.Frame):
+                            child.config(bg=bg_color)
+                            # Recursively style nested widgets
+                            for nested in child.winfo_children():
+                                if isinstance(nested, tk.Listbox):
+                                    nested.config(
+                                        bg=bg_color,
+                                        fg='orange',
+                                        selectbackground=bg_color,
+                                        selectforeground='orange',
+                                        highlightbackground=bg_color,
+                                        highlightcolor='orange'
+                                    )
+        except:
+            pass  # Silently fail if styling can't be applied
+    
     def open_selected_carrier_inara(self):
         """
         Open Inara.cz page for the currently selected fleet carrier in the dropdown.
@@ -3072,10 +3164,9 @@ class SpanshRouter():
                 return
             
             # Inara.cz commodity search URL format
-            # https://inara.cz/elite/commodities/?search=Tritium&nearstarsystem=SYSTEMNAME
+            # https://inara.cz/elite/commodities/?pi2=10269&ps1=SYSTEMNAME
             encoded_system = urllib.parse.quote(carrier_system)
-            encoded_commodity = urllib.parse.quote("Tritium")
-            url = f"https://inara.cz/elite/commodities/?search={encoded_commodity}&nearstarsystem={encoded_system}"
+            url = f"https://inara.cz/elite/commodities/?pi2=10269&ps1={encoded_system}"
             webbrowser.open(url)
             
         except Exception:
@@ -3085,49 +3176,48 @@ class SpanshRouter():
     def update_fleet_carrier_system_display(self):
         """
         Update the fleet carrier system location display under the dropdown.
+        Uses the same data source as the "View All" window (CSV data).
         """
         if not self.fleet_carrier_system_label:
             return
         
         try:
-            # Check if fleet carrier manager is initialized
-            if not self.fleet_carrier_manager:
+            # Get all carriers from CSV (same as "View All" window)
+            carriers = self.get_all_fleet_carriers()
+            if not carriers:
                 self.fleet_carrier_system_label.config(text="System: Unknown", foreground="gray")
                 return
             
-            # Get the currently selected carrier's system
-            carrier_system = None
+            # Find the selected carrier by callsign
+            carrier = None
             if self.selected_carrier_callsign:
-                carrier = self.fleet_carrier_manager.get_carrier(self.selected_carrier_callsign)
-                if carrier:
-                    current_system = carrier.get('current_system')
-                    if current_system:
-                        carrier_system = str(current_system).strip()
+                for c in carriers:
+                    if c.get('callsign', '').strip() == self.selected_carrier_callsign.strip():
+                        carrier = c
+                        break
             
-            # If no carrier selected, try to get the first/primary carrier
-            if not carrier_system:
-                carriers = self.get_all_fleet_carriers()
-                if carriers:
-                    # Get the most recently updated carrier
-                    try:
-                        sorted_carriers = sorted(
-                            carriers,
-                            key=lambda x: str(x.get('last_updated', '')),
-                            reverse=True
-                        )
-                        if sorted_carriers:
-                            current_system = sorted_carriers[0].get('current_system')
-                            if current_system:
-                                carrier_system = str(current_system).strip()
-                    except (KeyError, IndexError, TypeError):
-                        # If sorting fails, just use first carrier
-                        if carriers:
-                            current_system = carriers[0].get('current_system')
-                            if current_system:
-                                carrier_system = str(current_system).strip()
+            # If no carrier selected, use the most recently updated carrier
+            if not carrier:
+                try:
+                    sorted_carriers = sorted(
+                        carriers,
+                        key=lambda x: str(x.get('last_updated', '')),
+                        reverse=True
+                    )
+                    if sorted_carriers:
+                        carrier = sorted_carriers[0]
+                except (KeyError, IndexError, TypeError):
+                    # If sorting fails, just use first carrier
+                    if carriers:
+                        carrier = carriers[0]
             
-            if carrier_system:
-                self.fleet_carrier_system_label.config(text=f"System: {carrier_system}", foreground="")
+            # Get system from carrier data
+            if carrier:
+                current_system = carrier.get('current_system', '').strip()
+                if current_system:
+                    self.fleet_carrier_system_label.config(text=f"System: {current_system}", foreground="")
+                else:
+                    self.fleet_carrier_system_label.config(text="System: Unknown", foreground="gray")
             else:
                 self.fleet_carrier_system_label.config(text="System: Unknown", foreground="gray")
         except Exception:
@@ -3136,25 +3226,57 @@ class SpanshRouter():
     
     def find_tritium_near_current_system(self):
         """
-        Open Inara.cz commodity search for Tritium near the player's current system (from EDMC).
+        Open Inara.cz commodity search for Tritium near the selected fleet carrier's current system.
+        Uses the same data source as the "View All" window (CSV data).
         """
         try:
-            # Get the player's current system from EDMC monitor state
-            current_system = monitor.state.get('SystemName')
+            # Get all carriers from CSV (same as "View All" window)
+            carriers = self.get_all_fleet_carriers()
+            if not carriers:
+                confirmDialog.showwarning("No Carrier Data", "No fleet carrier data available.")
+                return
             
-            if not current_system:
-                confirmDialog.showwarning("No System", "Could not determine your current system location.")
+            # Find the selected carrier by callsign
+            carrier = None
+            if self.selected_carrier_callsign:
+                for c in carriers:
+                    if c.get('callsign', '').strip() == self.selected_carrier_callsign.strip():
+                        carrier = c
+                        break
+            
+            # If no carrier selected, use the most recently updated carrier
+            if not carrier:
+                try:
+                    sorted_carriers = sorted(
+                        carriers,
+                        key=lambda x: str(x.get('last_updated', '')),
+                        reverse=True
+                    )
+                    if sorted_carriers:
+                        carrier = sorted_carriers[0]
+                except (KeyError, IndexError, TypeError):
+                    # If sorting fails, just use first carrier
+                    if carriers:
+                        carrier = carriers[0]
+            
+            # Get carrier's current system
+            if carrier:
+                carrier_system = carrier.get('current_system', '').strip()
+                if not carrier_system:
+                    confirmDialog.showwarning("No System", "Could not determine carrier's current system location.")
+                    return
+            else:
+                confirmDialog.showwarning("No Carrier", "No fleet carrier selected.")
                 return
             
             # Inara.cz commodity search URL format
-            # https://inara.cz/elite/commodities/?search=Tritium&nearstarsystem=SYSTEMNAME
-            encoded_system = urllib.parse.quote(current_system)
-            encoded_commodity = urllib.parse.quote("Tritium")
-            url = f"https://inara.cz/elite/commodities/?search={encoded_commodity}&nearstarsystem={encoded_system}"
+            # https://inara.cz/elite/commodities/?pi2=10269&ps1=SYSTEMNAME
+            encoded_system = urllib.parse.quote(carrier_system)
+            url = f"https://inara.cz/elite/commodities/?pi2=10269&ps1={encoded_system}"
             webbrowser.open(url)
             
         except Exception:
-            logger.warning('!! Error opening Inara Tritium search near current system: ' + traceback.format_exc(), exc_info=False)
+            logger.warning('!! Error opening Inara Tritium search near carrier system: ' + traceback.format_exc(), exc_info=False)
             confirmDialog.showerror("Error", "Failed to open Inara Tritium search.")
     
     def update_fleet_carrier_rings_status(self):
@@ -3162,30 +3284,48 @@ class SpanshRouter():
         Update the Icy Rings and Pristine checkboxes from CSV data.
         Only queries EDSM API if data is missing from CSV (e.g., after system change or initial load).
         Updates are stored back to the CSV managed by FleetCarrierManager.
+        Uses the same data source as the "View All" window (CSV data).
         """
         if not self.fleet_carrier_icy_rings_cb or not self.fleet_carrier_pristine_cb:
             return
         
         try:
-            # Get the currently selected carrier
+            # Get all carriers from CSV (same as "View All" window)
+            carriers = self.get_all_fleet_carriers()
+            if not carriers:
+                # No carriers available, uncheck both
+                self.fleet_carrier_icy_rings_var.set(False)
+                self.fleet_carrier_pristine_var.set(False)
+                self._draw_icy_rings_toggle()
+                self._draw_pristine_toggle()
+                return
+            
+            # Find the selected carrier by callsign
             carrier = None
             callsign = None
+            if self.selected_carrier_callsign:
+                for c in carriers:
+                    if c.get('callsign', '').strip() == self.selected_carrier_callsign.strip():
+                        carrier = c
+                        callsign = c.get('callsign', '').strip()
+                        break
             
-            if self.selected_carrier_callsign and self.fleet_carrier_manager:
-                callsign = self.selected_carrier_callsign
-                carrier = self.fleet_carrier_manager.get_carrier(callsign)
-            
-            # If no carrier selected, try to get the first/primary carrier
+            # If no carrier selected, use the most recently updated carrier
             if not carrier:
-                carriers = self.get_all_fleet_carriers()
-                if carriers:
+                try:
                     sorted_carriers = sorted(
                         carriers,
-                        key=lambda x: x.get('last_updated', ''),
+                        key=lambda x: str(x.get('last_updated', '')),
                         reverse=True
                     )
-                    carrier = sorted_carriers[0]
-                    callsign = carrier.get('callsign', '')
+                    if sorted_carriers:
+                        carrier = sorted_carriers[0]
+                        callsign = carrier.get('callsign', '').strip()
+                except (KeyError, IndexError, TypeError):
+                    # If sorting fails, just use first carrier
+                    if carriers:
+                        carrier = carriers[0]
+                        callsign = carrier.get('callsign', '').strip()
             
             if not carrier or not callsign:
                 # No carrier available, uncheck both
@@ -3290,44 +3430,77 @@ class SpanshRouter():
     def update_fleet_carrier_tritium_display(self):
         """
         Update the fleet carrier Tritium display (fuel and cargo) under the system display.
+        Uses the same data source as the "View All" window (CSV data).
         """
         if not self.fleet_carrier_tritium_label:
             return
         
         try:
-            # Get the currently selected carrier's Tritium info
-            carrier = None
-            if self.selected_carrier_callsign and self.fleet_carrier_manager:
-                carrier = self.fleet_carrier_manager.get_carrier(self.selected_carrier_callsign)
+            # Get all carriers from CSV (same as "View All" window)
+            carriers = self.get_all_fleet_carriers()
+            if not carriers:
+                self.fleet_carrier_tritium_label.config(text="Tritium: Unknown", foreground="gray", cursor="")
+                return
             
-            # If no carrier selected, try to get the first/primary carrier
+            # Find the selected carrier by callsign
+            carrier = None
+            if self.selected_carrier_callsign:
+                for c in carriers:
+                    if c.get('callsign', '').strip() == self.selected_carrier_callsign.strip():
+                        carrier = c
+                        break
+            
+            # If no carrier selected, use the most recently updated carrier
             if not carrier:
-                carriers = self.get_all_fleet_carriers()
-                if carriers:
-                    # Get the most recently updated carrier
+                try:
                     sorted_carriers = sorted(
                         carriers,
-                        key=lambda x: x.get('last_updated', ''),
+                        key=lambda x: str(x.get('last_updated', '')),
                         reverse=True
                     )
-                    carrier = sorted_carriers[0]
+                    if sorted_carriers:
+                        carrier = sorted_carriers[0]
+                except (KeyError, IndexError, TypeError):
+                    # If sorting fails, just use first carrier
+                    if carriers:
+                        carrier = carriers[0]
             
+            # Get Tritium data from carrier (same logic as "View All" window)
             if carrier:
-                fuel = carrier.get('fuel', '0')
-                tritium_cargo = carrier.get('tritium_in_cargo', '0')
+                fuel_raw = carrier.get('fuel')
+                tritium_cargo_raw = carrier.get('tritium_in_cargo')
                 
-                # Format the display (keep blue for clickability)
-                if tritium_cargo and tritium_cargo != '0':
-                    display_text = f"Tritium: {fuel} (In Cargo: {tritium_cargo})"
+                # Check if fuel is missing (same logic as "View All" window)
+                fuel_missing = 'fuel' not in carrier or fuel_raw is None or (isinstance(fuel_raw, str) and fuel_raw.strip() == '')
+                tritium_cargo_missing = 'tritium_in_cargo' not in carrier or tritium_cargo_raw is None or (isinstance(tritium_cargo_raw, str) and tritium_cargo_raw.strip() == '')
+                
+                if fuel_missing:
+                    self.fleet_carrier_tritium_label.config(text="Tritium: Unknown", foreground="gray", cursor="")
                 else:
-                    display_text = f"Tritium: {fuel}"
-                
-                self.fleet_carrier_tritium_label.config(text=display_text, foreground="blue", cursor="hand2")
+                    # Format the display (same as "View All" window)
+                    fuel = fuel_raw if fuel_raw is not None else '0'
+                    tritium_cargo = tritium_cargo_raw if tritium_cargo_raw is not None else '0'
+                    
+                    if not tritium_cargo_missing and tritium_cargo and tritium_cargo != '0':
+                        try:
+                            fuel_int = int(fuel) if fuel else 0
+                            tritium_cargo_int = int(tritium_cargo) if tritium_cargo else 0
+                            display_text = f"Tritium: {fuel_int} (In Cargo: {tritium_cargo_int})"
+                        except (ValueError, TypeError):
+                            display_text = f"Tritium: {fuel} (In Cargo: {tritium_cargo})"
+                    else:
+                        try:
+                            fuel_int = int(fuel) if fuel else 0
+                            display_text = f"Tritium: {fuel_int}"
+                        except (ValueError, TypeError):
+                            display_text = f"Tritium: {fuel}"
+                    
+                    self.fleet_carrier_tritium_label.config(text=display_text, foreground="blue", cursor="hand2")
             else:
                 self.fleet_carrier_tritium_label.config(text="Tritium: Unknown", foreground="gray", cursor="")
         except Exception:
             logger.warning('!! Error updating fleet carrier Tritium display: ' + traceback.format_exc(), exc_info=False)
-            self.fleet_carrier_tritium_label.config(text="Tritium: Error", foreground="red", cursor="")
+            self.fleet_carrier_tritium_label.config(text="Tritium: Unknown", foreground="gray", cursor="")
     
     def _on_tritium_click(self):
         """Handle click on Tritium label - only if data is available"""
@@ -3353,55 +3526,60 @@ class SpanshRouter():
     def update_fleet_carrier_balance_display(self):
         """
         Update the fleet carrier credit balance display below the Tritium display.
+        Uses the same data source as the "View All" window (CSV data).
         """
         if not self.fleet_carrier_balance_label:
             return
         
         try:
-            # Check if fleet carrier manager is initialized
-            if not self.fleet_carrier_manager:
+            # Get all carriers from CSV (same as "View All" window)
+            carriers = self.get_all_fleet_carriers()
+            if not carriers:
                 self.fleet_carrier_balance_label.config(text="Balance: Unknown", foreground="gray")
                 return
             
-            # Get the currently selected carrier's balance info
+            # Find the selected carrier by callsign
             carrier = None
             if self.selected_carrier_callsign:
-                carrier = self.fleet_carrier_manager.get_carrier(self.selected_carrier_callsign)
+                for c in carriers:
+                    if c.get('callsign', '').strip() == self.selected_carrier_callsign.strip():
+                        carrier = c
+                        break
             
-            # If no carrier selected, try to get the first/primary carrier
+            # If no carrier selected, use the most recently updated carrier
             if not carrier:
-                carriers = self.get_all_fleet_carriers()
-                if carriers:
-                    # Get the most recently updated carrier
-                    try:
-                        sorted_carriers = sorted(
-                            carriers,
-                            key=lambda x: str(x.get('last_updated', '')),
-                            reverse=True
-                        )
-                        if sorted_carriers:
-                            carrier = sorted_carriers[0]
-                    except (KeyError, IndexError, TypeError):
-                        # If sorting fails, just use first carrier
-                        if carriers:
-                            carrier = carriers[0]
+                try:
+                    sorted_carriers = sorted(
+                        carriers,
+                        key=lambda x: str(x.get('last_updated', '')),
+                        reverse=True
+                    )
+                    if sorted_carriers:
+                        carrier = sorted_carriers[0]
+                except (KeyError, IndexError, TypeError):
+                    # If sorting fails, just use first carrier
+                    if carriers:
+                        carrier = carriers[0]
             
+            # Get balance from carrier data (same logic as "View All" window)
             if carrier:
-                balance = carrier.get('balance')
+                balance_raw = carrier.get('balance')
                 
-                # Check if balance is missing (None or empty string)
-                if balance is None or (isinstance(balance, str) and balance.strip() == ''):
+                # Check if balance is missing (same logic as "View All" window)
+                balance_missing = 'balance' not in carrier or balance_raw is None or (isinstance(balance_raw, str) and balance_raw.strip() == '')
+                
+                if balance_missing:
                     self.fleet_carrier_balance_label.config(text="Balance: Unknown", foreground="gray")
                 else:
-                    # Format balance with commas
+                    # Format balance with commas (same as "View All" window)
                     try:
-                        balance_int = int(balance) if balance else 0
+                        balance_int = int(balance_raw) if balance_raw else 0
                         balance_formatted = f"{balance_int:,}"
                         display_text = f"Balance: {balance_formatted} cr"
                         self.fleet_carrier_balance_label.config(text=display_text, foreground="")
                     except (ValueError, TypeError):
                         # If conversion fails, try to display as string
-                        display_text = f"Balance: {balance} cr" if balance else "Balance: Unknown"
+                        display_text = f"Balance: {balance_raw} cr" if balance_raw else "Balance: Unknown"
                         self.fleet_carrier_balance_label.config(text=display_text, foreground="gray")
             else:
                 self.fleet_carrier_balance_label.config(text="Balance: Unknown", foreground="gray")

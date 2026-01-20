@@ -2,6 +2,36 @@
 
 All notable changes to this project will be documented in this file.
 
+## 3.4.2
+
+### Bug Fixes
+
+- **Fleet Carrier Display Data Source**: Fixed System and Balance displays in main UI to use the same CSV data source as "View All" window
+  - Now correctly displays data for the selected carrier from dropdown
+  - Simplified data retrieval to match "View All" window behavior
+  - Ensures consistency between main UI and detail windows
+
+- **Icy Rings and Pristine Toggle Colors**: Fixed toggle button colors to match EDMC orange theme
+  - Toggle circles now display orange when checked (active), gray when unchecked
+  - Toggle labels ("Icy Rings" and "Pristine") now display orange when checked, gray when unchecked
+  - Improved visual consistency with EDMC color scheme
+
+- **Tritium Search Location**: Fixed Tritium search to use carrier's location instead of player's location
+  - Clicking Tritium label now searches near the selected fleet carrier's system
+  - More useful when carrier is in a different system than the player
+  - Consistent behavior with "Find Trit" button
+
+- **Tritium Search URL Format**: Fixed Inara.cz Tritium search URL to use correct format
+  - Changed from `?search=Tritium&nearstarsystem=` to `?pi2=10269&ps1=`
+  - Ensures proper search functionality on Inara.cz
+
+### UI Improvements
+
+- **Fleet Carrier Dropdown Styling**: Enhanced dropdown appearance to match EDMC dark theme
+  - Background color matches EDMC's dark background
+  - Text color changed to orange to match the rest of the program
+  - Improved visual consistency with plugin theme
+
 ## 3.4.1
 
 ### Bug Fixes
