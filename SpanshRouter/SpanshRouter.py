@@ -282,9 +282,9 @@ class SpanshRouter():
             self.fuel_used_lbl = tk.Label(self.frame, text="")
             self.dist_remaining_lbl = tk.Label(self.frame, text="")
             self.bodies_lbl = tk.Label(self.frame, justify=LEFT, text=self.bodieslbl_txt + self.bodies)
-            self.fleetrestock_lbl = tk.Label(self.frame, justify=LEFT, text=self.fleetstocklbl_txt, fg="red")
+            self.fleetrestock_lbl = tk.Label(self.frame, justify=tk.CENTER, text=self.fleetstocklbl_txt, fg="red")
             self.find_trit_btn = tk.Button(self.frame, text="Find Trit", command=self.find_tritium_on_inara, width=10)
-            self.refuel_lbl = tk.Label(self.frame, justify=LEFT, text=self.refuellbl_txt)
+            self.refuel_lbl = tk.Label(self.frame, justify=tk.CENTER, text=self.refuellbl_txt, fg="red")
             self.error_lbl = tk.Label(self.frame, textvariable=self.error_txt)
 
             # Plotting GUI
@@ -345,32 +345,32 @@ class SpanshRouter():
             # Fleet carrier status at the top
             # Store grid positions to prevent accidental repositioning
             self.fleet_carrier_status_label.grid(row=row, column=0, padx=2, pady=2, sticky=tk.W)
-            self.fleet_carrier_combobox.grid(row=row, column=1, padx=2, pady=2, sticky=tk.W)
-            self.fleet_carrier_details_btn.grid(row=row, column=2, padx=2, pady=2, sticky=tk.W)
-            self.fleet_carrier_inara_btn.grid(row=row, column=3, padx=2, pady=2, sticky=tk.W)
+            self.fleet_carrier_combobox.grid(row=row, column=1, padx=(0, 2), pady=2, sticky=tk.W)  # Reduced left padding to close gap
             # Store grid info to prevent repositioning
             self._fleet_carrier_row_start = row
             self.update_fleet_carrier_dropdown()
             row += 1
-            # Fleet carrier system location
-            self.fleet_carrier_system_label.grid(row=row, column=0, columnspan=4, padx=2, pady=2, sticky=tk.W)
-            self.update_fleet_carrier_system_display()
+            # View All and Inara buttons on row below Fleet Carrier
+            self.fleet_carrier_details_btn.grid(row=row, column=0, padx=2, pady=2, sticky=tk.W)
+            self.fleet_carrier_inara_btn.grid(row=row, column=1, padx=2, pady=2, sticky=tk.W)
             row += 1
-            # Fleet carrier Icy Rings and Pristine status - place side by side in separate columns
+            # Fleet carrier system location with Icy Rings and Pristine to the right
+            self.fleet_carrier_system_label.grid(row=row, column=0, padx=2, pady=2, sticky=tk.W)
+            # Fleet carrier Icy Rings and Pristine status - to the right of System
             # Note: icy_rings_cb and pristine_cb are frames containing canvas and label, so grid the frames
-            self.fleet_carrier_icy_rings_cb.grid(row=row, column=0, padx=2, pady=2, sticky=tk.W)
-            self.fleet_carrier_pristine_cb.grid(row=row, column=1, padx=2, pady=2, sticky=tk.W)
+            self.fleet_carrier_icy_rings_cb.grid(row=row, column=1, padx=2, pady=2, sticky=tk.W)
+            self.fleet_carrier_pristine_cb.grid(row=row, column=2, padx=2, pady=2, sticky=tk.W)
+            self.update_fleet_carrier_system_display()
             self.update_fleet_carrier_rings_status()
             row += 1
-            # Fleet carrier Tritium display (clickable to search Inara)
-            self.fleet_carrier_tritium_label.grid(row=row, column=0, columnspan=4, padx=2, pady=2, sticky=tk.W)
+            # Fleet carrier Tritium display (clickable to search Inara) with Balance to the right
+            self.fleet_carrier_tritium_label.grid(row=row, column=0, padx=2, pady=2, sticky=tk.W)
             self.fleet_carrier_tritium_label.bind("<Button-1>", lambda e: self.find_tritium_near_current_system())
             self.fleet_carrier_tritium_label.bind("<Enter>", lambda e, lbl=self.fleet_carrier_tritium_label: lbl.config(fg="darkblue", underline=True))
             self.fleet_carrier_tritium_label.bind("<Leave>", lambda e, lbl=self.fleet_carrier_tritium_label: lbl.config(fg="blue", underline=False))
+            # Fleet carrier Balance display - to the right of Tritium
+            self.fleet_carrier_balance_label.grid(row=row, column=1, padx=2, pady=2, sticky=tk.W)
             self.update_fleet_carrier_tritium_display()
-            row += 1
-            # Fleet carrier Balance display
-            self.fleet_carrier_balance_label.grid(row=row, column=0, columnspan=4, padx=2, pady=2, sticky=tk.W)
             self.update_fleet_carrier_balance_display()
             row += 1
             # Separator line
@@ -392,10 +392,13 @@ class SpanshRouter():
             row += 1
             self.bodies_lbl.grid(row=row, columnspan=4, padx=2, sticky=tk.W)
             row += 1
-            self.fleetrestock_lbl.grid(row=row, column=0, padx=2, sticky=tk.W)
-            self.find_trit_btn.grid(row=row, column=1, padx=2, pady=2, sticky=tk.W)
+            # Fleet restock warning - centered and red
+            self.fleetrestock_lbl.grid(row=row, column=0, columnspan=4, padx=2, sticky=tk.EW)
             row += 1
-            self.refuel_lbl.grid(row=row, columnspan=4, padx=2, sticky=tk.W)
+            self.find_trit_btn.grid(row=row, column=0, padx=2, pady=2, sticky=tk.W)
+            row += 1
+            # Refuel warning - centered and red
+            self.refuel_lbl.grid(row=row, column=0, columnspan=4, padx=2, sticky=tk.EW)
             row += 1
             self.source_ac.grid(row=row, columnspan=4, padx=2, pady=(5,0)) # The AutoCompleter takes two rows to show the list when needed, so we skip one
             row += 2
@@ -406,16 +409,16 @@ class SpanshRouter():
             row += 1
             self.efficiency_slider.grid(row=row, padx=2, pady=5, columnspan=3, sticky=tk.EW)
             row += 1
-            # Basic controls - always visible, side by side in separate columns
-            self.csv_route_btn.grid(row=row, column=0, padx=2, pady=5, sticky=tk.W)
-            self.view_route_btn.grid(row=row, column=1, padx=2, pady=5, sticky=tk.W)
-            self.plot_gui_btn.grid(row=row, column=2, padx=2, pady=5, sticky=tk.W)
+            # Basic controls - always visible, side by side in separate columns, tighter spacing
+            self.csv_route_btn.grid(row=row, column=0, padx=(2, 1), pady=5, sticky=tk.W)
+            self.view_route_btn.grid(row=row, column=1, padx=1, pady=5, sticky=tk.W)
+            self.plot_gui_btn.grid(row=row, column=2, padx=1, pady=5, sticky=tk.W)
             # Plotting controls - shown/hidden based on state
-            self.plot_route_btn.grid(row=row, column=0, padx=2, pady=5, sticky=tk.W)
-            self.cancel_plot.grid(row=row, column=1, padx=2, pady=5, sticky=tk.W)
+            self.plot_route_btn.grid(row=row, column=0, padx=(2, 1), pady=5, sticky=tk.W)
+            self.cancel_plot.grid(row=row, column=1, padx=1, pady=5, sticky=tk.W)
             row += 1
-            self.export_route_btn.grid(row=row, column=0, padx=2, pady=5, sticky=tk.W)
-            self.clear_route_btn.grid(row=row, column=1, padx=2, pady=5, sticky=tk.W)
+            self.export_route_btn.grid(row=row, column=0, padx=(2, 1), pady=5, sticky=tk.W)
+            self.clear_route_btn.grid(row=row, column=1, padx=1, pady=5, sticky=tk.W)
             row += 1
             self.jumpcounttxt_lbl.grid(row=row, padx=2, pady=5, sticky=tk.W)
             row += 1
