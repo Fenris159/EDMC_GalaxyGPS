@@ -1,7 +1,18 @@
+import os
+import sys
 import tkinter.messagebox as confirmDialog
 
 from companion import SERVER_LIVE, SERVER_LEGACY, SERVER_BETA  # type: ignore
-from SpanshRouter.SpanshRouter import SpanshRouter
+
+# Import SpanshRouter class - this must work regardless of plugin folder name
+try:
+    from SpanshRouter.SpanshRouter import SpanshRouter
+except ImportError as e:
+    # If import fails, try to add the plugin directory to sys.path
+    plugin_dir = os.path.dirname(os.path.abspath(__file__))
+    if plugin_dir not in sys.path:
+        sys.path.insert(0, plugin_dir)
+    from SpanshRouter.SpanshRouter import SpanshRouter
 
 spansh_router = None
 
