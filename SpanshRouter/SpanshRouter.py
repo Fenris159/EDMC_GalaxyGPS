@@ -221,11 +221,14 @@ class SpanshRouter():
             )
             self.fleet_carrier_system_label = tk.Label(self.frame, text="System:", foreground="gray")
             # Icy Rings and Pristine status - circular toggle buttons (radio-button style)
+            # Create a container frame to hold both toggles side-by-side
+            frame_bg = self.frame.cget('bg')
+            rings_pristine_container = tk.Frame(self.frame, bg=frame_bg)
+            
             self.fleet_carrier_icy_rings_var = tk.BooleanVar(value=False)
             
             # Icy Rings toggle button
-            icy_rings_frame = tk.Frame(self.frame, bg=self.frame.cget('bg'))
-            frame_bg = self.frame.cget('bg')
+            icy_rings_frame = tk.Frame(rings_pristine_container, bg=frame_bg)
             self.fleet_carrier_icy_rings_canvas = tk.Canvas(
                 icy_rings_frame,
                 width=20,
@@ -233,20 +236,20 @@ class SpanshRouter():
                 highlightthickness=0,
                 bg=frame_bg
             )
-            self.fleet_carrier_icy_rings_canvas.pack(side=tk.LEFT, padx=(0, 5))
+            self.fleet_carrier_icy_rings_canvas.pack(side=tk.LEFT, padx=(0, 2))
             # No click binding - read-only display
             self.fleet_carrier_icy_rings_label = tk.Label(
                 icy_rings_frame,
-                text="Icy Rings:",
+                text="Icy Rings",
                 foreground="gray",
                 bg=frame_bg
             )
             self.fleet_carrier_icy_rings_label.pack(side=tk.LEFT)
-            self.fleet_carrier_icy_rings_cb = icy_rings_frame
+            icy_rings_frame.pack(side=tk.LEFT)
             
             # Pristine toggle button
-            pristine_frame = tk.Frame(self.frame, bg=frame_bg)
             self.fleet_carrier_pristine_var = tk.BooleanVar(value=False)
+            pristine_frame = tk.Frame(rings_pristine_container, bg=frame_bg)
             self.fleet_carrier_pristine_canvas = tk.Canvas(
                 pristine_frame,
                 width=20,
@@ -254,16 +257,21 @@ class SpanshRouter():
                 highlightthickness=0,
                 bg=frame_bg
             )
-            self.fleet_carrier_pristine_canvas.pack(side=tk.LEFT, padx=(0, 5))
+            self.fleet_carrier_pristine_canvas.pack(side=tk.LEFT, padx=(2, 0))  # Small left padding to separate from Icy Rings
             # No click binding - read-only display
             self.fleet_carrier_pristine_label = tk.Label(
                 pristine_frame,
-                text="Pristine:",
+                text="Pristine",
                 foreground="gray",
                 bg=frame_bg
             )
             self.fleet_carrier_pristine_label.pack(side=tk.LEFT)
+            pristine_frame.pack(side=tk.LEFT)
+            
+            # Store references to the frames for drawing and the container for grid placement
+            self.fleet_carrier_icy_rings_cb = icy_rings_frame
             self.fleet_carrier_pristine_cb = pristine_frame
+            self.fleet_carrier_rings_pristine_container = rings_pristine_container
             self.fleet_carrier_tritium_label = tk.Label(
                 self.frame, 
                 text="Tritium:", 
@@ -345,7 +353,7 @@ class SpanshRouter():
             # Fleet carrier status at the top
             # Store grid positions to prevent accidental repositioning
             self.fleet_carrier_status_label.grid(row=row, column=0, padx=2, pady=2, sticky=tk.W)
-            self.fleet_carrier_combobox.grid(row=row, column=1, padx=(0, 2), pady=2, sticky=tk.W)  # Reduced left padding to close gap
+            self.fleet_carrier_combobox.grid(row=row, column=1, padx=0, pady=2, sticky=tk.W)  # No left padding to close gap
             # Store grid info to prevent repositioning
             self._fleet_carrier_row_start = row
             self.update_fleet_carrier_dropdown()
@@ -356,10 +364,9 @@ class SpanshRouter():
             row += 1
             # Fleet carrier system location with Icy Rings and Pristine to the right
             self.fleet_carrier_system_label.grid(row=row, column=0, padx=2, pady=2, sticky=tk.W)
-            # Fleet carrier Icy Rings and Pristine status - to the right of System
-            # Note: icy_rings_cb and pristine_cb are frames containing canvas and label, so grid the frames
-            self.fleet_carrier_icy_rings_cb.grid(row=row, column=1, padx=2, pady=2, sticky=tk.W)
-            self.fleet_carrier_pristine_cb.grid(row=row, column=2, padx=2, pady=2, sticky=tk.W)
+            # Fleet carrier Icy Rings and Pristine status - to the right of System, directly next to each other
+            # Use the container frame that has both toggles packed side-by-side
+            self.fleet_carrier_rings_pristine_container.grid(row=row, column=1, padx=2, pady=2, sticky=tk.W)
             self.update_fleet_carrier_system_display()
             self.update_fleet_carrier_rings_status()
             row += 1
@@ -412,12 +419,12 @@ class SpanshRouter():
             # Basic controls - always visible, side by side in separate columns, tighter spacing
             self.csv_route_btn.grid(row=row, column=0, padx=(2, 1), pady=5, sticky=tk.W)
             self.view_route_btn.grid(row=row, column=1, padx=1, pady=5, sticky=tk.W)
-            self.plot_gui_btn.grid(row=row, column=2, padx=1, pady=5, sticky=tk.W)
+            self.plot_gui_btn.grid(row=row, column=0, padx=(2, 1), pady=5, sticky=tk.W)  # Plot route in Export's place
             # Plotting controls - shown/hidden based on state
             self.plot_route_btn.grid(row=row, column=0, padx=(2, 1), pady=5, sticky=tk.W)
             self.cancel_plot.grid(row=row, column=1, padx=1, pady=5, sticky=tk.W)
             row += 1
-            self.export_route_btn.grid(row=row, column=0, padx=(2, 1), pady=5, sticky=tk.W)
+            self.export_route_btn.grid(row=row, column=0, padx=(2, 1), pady=5, sticky=tk.W)  # Export moved below
             self.clear_route_btn.grid(row=row, column=1, padx=1, pady=5, sticky=tk.W)
             row += 1
             self.jumpcounttxt_lbl.grid(row=row, padx=2, pady=5, sticky=tk.W)
