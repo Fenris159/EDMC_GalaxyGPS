@@ -357,10 +357,9 @@ class SpanshRouter():
             self.update_fleet_carrier_system_display()
             row += 1
             # Fleet carrier Icy Rings and Pristine status
-            self.fleet_carrier_icy_rings_label.grid(row=row, column=0, padx=5, pady=2, sticky=tk.W)
-            self.fleet_carrier_icy_rings_cb.grid(row=row, column=1, padx=2, pady=2, sticky=tk.W)
-            self.fleet_carrier_pristine_label.grid(row=row, column=2, padx=5, pady=2, sticky=tk.W)
-            self.fleet_carrier_pristine_cb.grid(row=row, column=3, padx=2, pady=2, sticky=tk.W)
+            # Note: icy_rings_cb and pristine_cb are frames containing canvas and label, so grid the frames
+            self.fleet_carrier_icy_rings_cb.grid(row=row, column=0, padx=5, pady=2, sticky=tk.W)
+            self.fleet_carrier_pristine_cb.grid(row=row, column=1, padx=5, pady=2, sticky=tk.W)
             self.update_fleet_carrier_rings_status()
             row += 1
             # Fleet carrier Tritium display (clickable to search Inara)
