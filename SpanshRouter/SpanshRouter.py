@@ -121,73 +121,73 @@ class SpanshRouter():
             
             # Check for and destroy any existing frames with fleet carrier widgets (defensive check)
             try:
-            for widget in parent.winfo_children():
-                if isinstance(widget, tk.Frame):
-                    # Check if this frame has our signature widgets
-                    try:
-                        for child in widget.winfo_children():
-                            if isinstance(child, tk.Label):
-                                try:
-                                    text = child.cget('text')
-                                    if text and 'Fleet Carrier' in text:
-                                        # Found our frame - reuse if it's our tracked frame
-                                        if hasattr(self, 'frame') and widget == self.frame:
-                                            try:
-                                                if self.frame.winfo_exists():
-                                                    if (hasattr(self, 'fleet_carrier_status_label') and 
-                                                        self.fleet_carrier_status_label and
-                                                        self.fleet_carrier_status_label.winfo_exists()):
-                                                        self._gui_initialized = True
-                                                        return self.frame
-                                            except (tk.TclError, AttributeError):
-                                                pass
-                                        # Otherwise destroy duplicate frames
-                                        for child_widget in widget.winfo_children():
-                                            try:
-                                                child_widget.destroy()
-                                            except Exception:
-                                                pass
-                                        widget.destroy()
-                                        break
-                                except Exception:
-                                    pass
-                    except Exception:
-                        pass
+                for widget in parent.winfo_children():
+                    if isinstance(widget, tk.Frame):
+                        # Check if this frame has our signature widgets
+                        try:
+                            for child in widget.winfo_children():
+                                if isinstance(child, tk.Label):
+                                    try:
+                                        text = child.cget('text')
+                                        if text and 'Fleet Carrier' in text:
+                                            # Found our frame - reuse if it's our tracked frame
+                                            if hasattr(self, 'frame') and widget == self.frame:
+                                                try:
+                                                    if self.frame.winfo_exists():
+                                                        if (hasattr(self, 'fleet_carrier_status_label') and 
+                                                            self.fleet_carrier_status_label and
+                                                            self.fleet_carrier_status_label.winfo_exists()):
+                                                            self._gui_initialized = True
+                                                            return self.frame
+                                                except (tk.TclError, AttributeError):
+                                                    pass
+                                            # Otherwise destroy duplicate frames
+                                            for child_widget in widget.winfo_children():
+                                                try:
+                                                    child_widget.destroy()
+                                                except Exception:
+                                                    pass
+                                            widget.destroy()
+                                            break
+                                    except Exception:
+                                        pass
+                        except Exception:
+                            pass
             except Exception:
                 pass
             
             # Destroy existing frame if it exists
             if hasattr(self, 'frame') and self.frame:
-            try:
                 try:
-                    self.frame.winfo_exists()
-                    # Frame exists, destroy all child widgets first
-                    for widget in self.frame.winfo_children():
-                        try:
-                            widget.destroy()
-                        except Exception:
-                            pass
-                    self.frame.destroy()
-                except tk.TclError:
-                    # Frame was already destroyed
+                    try:
+                        self.frame.winfo_exists()
+                        # Frame exists, destroy all child widgets first
+                        for widget in self.frame.winfo_children():
+                            try:
+                                widget.destroy()
+                            except Exception:
+                                pass
+                        self.frame.destroy()
+                    except tk.TclError:
+                        # Frame was already destroyed
+                        pass
+                except Exception:
                     pass
-            except Exception:
-                pass
                 finally:
                     self.frame = None
             
             # Reset fleet carrier widget references (they'll be recreated below)
             self.fleet_carrier_status_label = None
-        self.fleet_carrier_combobox = None
-        self.fleet_carrier_details_btn = None
-        self.fleet_carrier_inara_btn = None
-        self.fleet_carrier_system_label = None
-        self.fleet_carrier_icy_rings_label = None
-        self.fleet_carrier_icy_rings_cb = None
-        self.fleet_carrier_pristine_label = None
-        self.fleet_carrier_pristine_cb = None
-        self.fleet_carrier_tritium_label = None
-        self.fleet_carrier_balance_label = None
+            self.fleet_carrier_combobox = None
+            self.fleet_carrier_details_btn = None
+            self.fleet_carrier_inara_btn = None
+            self.fleet_carrier_system_label = None
+            self.fleet_carrier_icy_rings_label = None
+            self.fleet_carrier_icy_rings_cb = None
+            self.fleet_carrier_pristine_label = None
+            self.fleet_carrier_pristine_cb = None
+            self.fleet_carrier_tritium_label = None
+            self.fleet_carrier_balance_label = None
             self.fleet_carrier_separator = None
             
             # Create frame fresh
