@@ -30,6 +30,40 @@ plugin_name = os.path.basename(os.path.dirname(os.path.dirname(__file__)))
 logger = logging.getLogger(f'{appname}.{plugin_name}')
 
 
+class ThemeSafeCanvas(tk.Canvas):
+    """
+    A Canvas widget that gracefully handles foreground option from EDMC's theme system.
+    Canvas widgets don't support the -foreground option, so we silently ignore it
+    to prevent TclError when EDMC's theme system tries to apply it.
+    """
+    def configure(self, cnf=None, **kw):
+        """Override configure to silently ignore foreground option."""
+        if cnf is not None:
+            # Handle dict-style configuration
+            if isinstance(cnf, dict):
+                cnf = {k: v for k, v in cnf.items() if k not in ('foreground', '-foreground', 'fg', '-fg')}
+            elif isinstance(cnf, str):
+                # Handle single option query like 'foreground' or '-foreground'
+                if cnf in ('foreground', '-foreground', 'fg', '-fg'):
+                    # Return empty string for unsupported option (matching tkinter behavior)
+                    return ''
+        # Remove foreground from keyword arguments
+        kw = {k: v for k, v in kw.items() if k not in ('foreground', '-foreground', 'fg', '-fg')}
+        # Call parent configure with filtered options (only if there are options to configure)
+        if cnf is None and not kw:
+            return super().configure()
+        return super().configure(cnf, **kw)
+    
+    def __setitem__(self, key, value):
+        """Override __setitem__ to silently ignore foreground option."""
+        if key in ('foreground', '-foreground', 'fg', '-fg'):
+            # Silently ignore foreground option
+            return
+        return super().__setitem__(key, value)
+    
+    config = configure  # Alias for configure method
+
+
 class SpanshRouter():
     def __init__(self, plugin_dir):
         version_file = os.path.join(plugin_dir, "version.json")
@@ -233,7 +267,7 @@ class SpanshRouter():
             
             # Icy Rings toggle button
             icy_rings_frame = tk.Frame(rings_pristine_container, bg=frame_bg)
-            self.fleet_carrier_icy_rings_canvas = tk.Canvas(
+            self.fleet_carrier_icy_rings_canvas = ThemeSafeCanvas(
                 icy_rings_frame,
                 width=20,
                 height=20,
@@ -254,7 +288,7 @@ class SpanshRouter():
             # Pristine toggle button
             self.fleet_carrier_pristine_var = tk.BooleanVar(value=False)
             pristine_frame = tk.Frame(rings_pristine_container, bg=frame_bg)
-            self.fleet_carrier_pristine_canvas = tk.Canvas(
+            self.fleet_carrier_pristine_canvas = ThemeSafeCanvas(
                 pristine_frame,
                 width=20,
                 height=20,
@@ -308,7 +342,7 @@ class SpanshRouter():
             supercharge_frame = tk.Frame(self.frame, bg=self.frame.cget('bg'))
             # Create a custom toggle button using a canvas to draw a circle
             frame_bg = self.frame.cget('bg')
-            self.supercharge_toggle_canvas = tk.Canvas(
+            self.supercharge_toggle_canvas = ThemeSafeCanvas(
                 supercharge_frame,
                 width=24,
                 height=24,
@@ -2495,7 +2529,7 @@ class SpanshRouter():
             v_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
             
             # Create canvas with both scrollbars
-            canvas = tk.Canvas(main_frame, bg="white", 
+            canvas = ThemeSafeCanvas(main_frame, bg="white", 
                              xscrollcommand=h_scrollbar.set,
                              yscrollcommand=v_scrollbar.set)
             canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
@@ -2772,7 +2806,7 @@ class SpanshRouter():
                 # Create a frame to center the canvas within the column
                 icy_rings_frame = tk.Frame(table_frame, bg=row_bg)
                 icy_rings_frame.grid(row=data_row, column=col_idx*2, padx=2, pady=5, sticky=tk.EW)
-                icy_rings_canvas = tk.Canvas(icy_rings_frame, width=20, height=20, highlightthickness=0, bg=row_bg)
+                icy_rings_canvas = ThemeSafeCanvas(icy_rings_frame, width=20, height=20, highlightthickness=0, bg=row_bg)
                 icy_rings_canvas.pack(anchor=tk.CENTER)  # Center the canvas in the frame
                 if icy_rings_value:
                     icy_rings_canvas.create_oval(5, 5, 15, 15, fill="red", outline="darkred", width=1)
@@ -2790,7 +2824,7 @@ class SpanshRouter():
                 # Create a frame to center the canvas within the column
                 pristine_frame = tk.Frame(table_frame, bg=row_bg)
                 pristine_frame.grid(row=data_row, column=col_idx*2, padx=2, pady=5, sticky=tk.EW)
-                pristine_canvas = tk.Canvas(pristine_frame, width=20, height=20, highlightthickness=0, bg=row_bg)
+                pristine_canvas = ThemeSafeCanvas(pristine_frame, width=20, height=20, highlightthickness=0, bg=row_bg)
                 pristine_canvas.pack(anchor=tk.CENTER)  # Center the canvas in the frame
                 if pristine_value:
                     pristine_canvas.create_oval(5, 5, 15, 15, fill="red", outline="darkred", width=1)
@@ -2808,7 +2842,7 @@ class SpanshRouter():
                 # Create a frame to center the canvas within the column
                 docking_access_frame = tk.Frame(table_frame, bg=row_bg)
                 docking_access_frame.grid(row=data_row, column=col_idx*2, padx=2, pady=5, sticky=tk.EW)
-                docking_access_canvas = tk.Canvas(docking_access_frame, width=20, height=20, highlightthickness=0, bg=row_bg)
+                docking_access_canvas = ThemeSafeCanvas(docking_access_frame, width=20, height=20, highlightthickness=0, bg=row_bg)
                 docking_access_canvas.pack(anchor=tk.CENTER)  # Center the canvas in the frame
                 if docking_access_value:
                     docking_access_canvas.create_oval(5, 5, 15, 15, fill="red", outline="darkred", width=1)
@@ -2829,7 +2863,7 @@ class SpanshRouter():
                 # Create a frame to center the canvas within the column
                 notorious_access_frame = tk.Frame(table_frame, bg=row_bg)
                 notorious_access_frame.grid(row=data_row, column=col_idx*2, padx=2, pady=5, sticky=tk.EW)
-                notorious_access_canvas = tk.Canvas(notorious_access_frame, width=20, height=20, highlightthickness=0, bg=row_bg)
+                notorious_access_canvas = ThemeSafeCanvas(notorious_access_frame, width=20, height=20, highlightthickness=0, bg=row_bg)
                 notorious_access_canvas.pack(anchor=tk.CENTER)  # Center the canvas in the frame
                 if notorious_access_value:
                     notorious_access_canvas.create_oval(5, 5, 15, 15, fill="red", outline="darkred", width=1)
@@ -3495,7 +3529,7 @@ class SpanshRouter():
             v_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
             
             # Create canvas with both scrollbars
-            canvas = tk.Canvas(main_frame, bg="white",
+            canvas = ThemeSafeCanvas(main_frame, bg="white",
                              xscrollcommand=h_scrollbar.set,
                              yscrollcommand=v_scrollbar.set)
             canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
@@ -3797,7 +3831,7 @@ class SpanshRouter():
                         checkbox_frame.grid(row=data_row, column=col_idx*2, padx=2, pady=5, sticky=tk.EW)
                         
                         # Create a canvas to draw a colored dot (centered in frame)
-                        checkbox_canvas = tk.Canvas(checkbox_frame, width=20, height=20, highlightthickness=0, bg=row_bg)
+                        checkbox_canvas = ThemeSafeCanvas(checkbox_frame, width=20, height=20, highlightthickness=0, bg=row_bg)
                         checkbox_canvas.pack(anchor=tk.CENTER)  # Center the canvas in the frame
                         
                         if checkbox_value:
