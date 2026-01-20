@@ -7,7 +7,7 @@ import traceback
 from tkinter import *
 
 import requests  # type: ignore
-from SpanshRouter.PlaceHolder import PlaceHolder
+from .PlaceHolder import PlaceHolder
 
 from config import appname  # type: ignore
 

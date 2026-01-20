@@ -1,7 +1,7 @@
 import sys
 import traceback
-from SpanshRouter.updater import SpanshUpdater
-from SpanshRouter.AutoCompleter import AutoCompleter
-from SpanshRouter.PlaceHolder import PlaceHolder
-from SpanshRouter.FleetCarrierManager import FleetCarrierManager
-from SpanshRouter import SpanshRouter
+from .updater import SpanshUpdater
+from .AutoCompleter import AutoCompleter
+from .PlaceHolder import PlaceHolder
+from .FleetCarrierManager import FleetCarrierManager
+from .SpanshRouter import SpanshRouter
