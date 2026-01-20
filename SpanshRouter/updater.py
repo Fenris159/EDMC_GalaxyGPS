@@ -24,7 +24,10 @@ class SpanshUpdater():
         self.changelogs = self.get_changelog()
 
     def download_zip(self):
-        url = 'https://github.com/CMDR-Kiel42/EDMC_SpanshRouter/releases/download/v' + self.version + '/' + self.zip_name
+        # GitHub repository configuration
+        github_repo = "Fenris159/EDMC_SpanshRouter"  # Format: "username/repository"
+        
+        url = f'https://github.com/{github_repo}/releases/download/v{self.version}/{self.zip_name}'
 
         try:
             r = requests.get(url)
@@ -55,7 +58,10 @@ class SpanshUpdater():
             logger.warning("Error when downloading the latest SpanshRouter update")
 
     def get_changelog(self):
-        url = "https://api.github.com/repos/CMDR-Kiel42/EDMC_SpanshRouter/releases/latest"
+        # GitHub repository configuration
+        github_repo = "Fenris159/EDMC_SpanshRouter"  # Format: "username/repository"
+        
+        url = f"https://api.github.com/repos/{github_repo}/releases/latest"
         try:
             r = requests.get(url, timeout=2)
             

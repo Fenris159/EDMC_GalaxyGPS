@@ -9,7 +9,9 @@ import sys
 import tkinter as tk
 import tkinter.filedialog as filedialog
 import tkinter.messagebox as confirmDialog
+import tkinter.ttk as ttk
 import traceback
+import urllib.parse
 import webbrowser
 from time import sleep
 from tkinter import *
@@ -20,6 +22,7 @@ from monitor import monitor  # type: ignore
 
 from . import AutoCompleter, PlaceHolder
 from .updater import SpanshUpdater
+from .FleetCarrierManager import FleetCarrierManager
 
 # We need a name of plugin dir, not SpanshRouter.py dir
 plugin_name = os.path.basename(os.path.dirname(os.path.dirname(__file__)))
@@ -30,9 +33,17 @@ class SpanshRouter():
     def __init__(self, plugin_dir):
         version_file = os.path.join(plugin_dir, "version.json")
         with open(version_file, 'r') as version_fd:
-            self.plugin_version = version_fd.read()
+            # Parse as JSON to handle quoted strings properly
+            version_content = version_fd.read().strip()
+            try:
+                self.plugin_version = json.loads(version_content)
+            except json.JSONDecodeError:
+                # Fallback: if it's not valid JSON, treat as plain text (remove quotes if present)
+                self.plugin_version = version_content.strip('"\'')
 
         self.update_available = False
+        # Initialize Fleet Carrier Manager for CAPI integration
+        self.fleet_carrier_manager = FleetCarrierManager(plugin_dir)
         self.roadtoriches = False
         self.fleetcarrier = False
         self.galaxy = False
@@ -41,7 +52,7 @@ class SpanshRouter():
         self.next_wp_label = "Next waypoint: "
         self.jumpcountlbl_txt = "Estimated jumps left: "
         self.bodieslbl_txt = "Bodies to scan at: "
-        self.fleetstocklbl_txt = "Time to restock Tritium"
+        self.fleetstocklbl_txt = "Warning: Restock Tritium"
         self.refuellbl_txt = "Time to scoop some fuel"
         self.bodies = ""
         self.parent = None
@@ -65,16 +76,77 @@ class SpanshRouter():
         self.dist_prev = ""
         self.dist_remaining = ""
         self.last_dist_next = ""
+        self.fuel_used = ""
+        self.has_fuel_used = False
         # Supercharge mode (Spansh neutron routing)
         # False = normal supercharge (x4)
         # True  = overcharge supercharge (x6)
         self.supercharge_overcharge = tk.BooleanVar(value=False)
+        # Fleet carrier status display
+        self.fleet_carrier_status_label = None
+        self.fleet_carrier_combobox = None
+        self.fleet_carrier_details_btn = None
+        self.fleet_carrier_inara_btn = None
+        self.fleet_carrier_system_label = None
+        self.fleet_carrier_tritium_label = None
+        self.selected_carrier_callsign = None
+        self.fleet_carrier_var = tk.StringVar()
 
     #   -- GUI part --
     def init_gui(self, parent):
         self.parent = parent
         self.frame = tk.Frame(parent, borderwidth=2)
         self.frame.grid(sticky=tk.NSEW, columnspan=2)
+        
+        # Fleet carrier status display (compact, at top)
+        self.fleet_carrier_status_label = tk.Label(self.frame, text="Fleet Carrier:")
+        self.fleet_carrier_combobox = ttk.Combobox(
+            self.frame, 
+            textvariable=self.fleet_carrier_var,
+            state="readonly",
+            width=40
+        )
+        self.fleet_carrier_combobox.bind("<<ComboboxSelected>>", self.on_carrier_selected)
+        self.fleet_carrier_details_btn = tk.Button(
+            self.frame, 
+            text="View All", 
+            command=self.show_carrier_details_window,
+            width=8
+        )
+        self.fleet_carrier_inara_btn = tk.Button(
+            self.frame,
+            text="Inara",
+            command=self.open_selected_carrier_inara,
+            width=8,
+            fg="blue",
+            cursor="hand2",
+            state=tk.DISABLED
+        )
+        self.fleet_carrier_system_label = tk.Label(self.frame, text="System:", foreground="gray")
+        # Icy Rings and Pristine status checkboxes
+        self.fleet_carrier_icy_rings_var = tk.BooleanVar(value=False)
+        self.fleet_carrier_icy_rings_label = tk.Label(self.frame, text="Icy Rings:", foreground="gray")
+        self.fleet_carrier_icy_rings_cb = tk.Checkbutton(
+            self.frame, 
+            variable=self.fleet_carrier_icy_rings_var, 
+            state=tk.DISABLED,
+            text=""
+        )
+        self.fleet_carrier_pristine_var = tk.BooleanVar(value=False)
+        self.fleet_carrier_pristine_label = tk.Label(self.frame, text="Pristine:", foreground="gray")
+        self.fleet_carrier_pristine_cb = tk.Checkbutton(
+            self.frame, 
+            variable=self.fleet_carrier_pristine_var, 
+            state=tk.DISABLED,
+            text=""
+        )
+        self.fleet_carrier_tritium_label = tk.Label(
+            self.frame, 
+            text="Tritium:", 
+            foreground="blue", 
+            cursor="hand2"
+        )
+        self.fleet_carrier_balance_label = tk.Label(self.frame, text="Balance:", foreground="gray")
 
         # Route info
         self.waypoint_prev_btn = tk.Button(self.frame, text="^", command=self.goto_prev_waypoint)
@@ -83,9 +155,11 @@ class SpanshRouter():
         self.jumpcounttxt_lbl = tk.Label(self.frame, text=self.jumpcountlbl_txt + str(self.jumps_left))
         self.dist_prev_lbl = tk.Label(self.frame, text="")
         self.dist_next_lbl = tk.Label(self.frame, text="")
+        self.fuel_used_lbl = tk.Label(self.frame, text="")
         self.dist_remaining_lbl = tk.Label(self.frame, text="")
         self.bodies_lbl = tk.Label(self.frame, justify=LEFT, text=self.bodieslbl_txt + self.bodies)
-        self.fleetrestock_lbl = tk.Label(self.frame, justify=LEFT, text=self.fleetstocklbl_txt)
+        self.fleetrestock_lbl = tk.Label(self.frame, justify=LEFT, text=self.fleetstocklbl_txt, fg="red")
+        self.find_trit_btn = tk.Button(self.frame, text="Find Trit", command=self.find_tritium_on_inara, width=10)
         self.refuel_lbl = tk.Label(self.frame, justify=LEFT, text=self.refuellbl_txt)
         self.error_lbl = tk.Label(self.frame, textvariable=self.error_txt)
 
@@ -102,10 +176,45 @@ class SpanshRouter():
         self.cancel_plot = tk.Button(self.frame, text="Cancel", command=lambda: self.show_plot_gui(False))
 
         self.csv_route_btn = tk.Button(self.frame, text="Import file", command=self.plot_file)
+        self.view_route_btn = tk.Button(self.frame, text="View Route", command=self.show_route_window)
         self.export_route_btn = tk.Button(self.frame, text="Export for TCE", command=self.export_route)
         self.clear_route_btn = tk.Button(self.frame, text="Clear route", command=self.clear_route)
 
         row = 0
+        # Fleet carrier status at the top
+        self.fleet_carrier_status_label.grid(row=row, column=0, padx=5, pady=2, sticky=tk.W)
+        self.fleet_carrier_combobox.grid(row=row, column=1, padx=5, pady=2, sticky=tk.W)
+        self.fleet_carrier_details_btn.grid(row=row, column=2, padx=2, pady=2, sticky=tk.W)
+        self.fleet_carrier_inara_btn.grid(row=row, column=3, padx=2, pady=2, sticky=tk.W)
+        self.update_fleet_carrier_dropdown()
+        row += 1
+        # Fleet carrier system location
+        self.fleet_carrier_system_label.grid(row=row, column=0, columnspan=2, padx=5, pady=2, sticky=tk.W)
+        self.update_fleet_carrier_system_display()
+        row += 1
+        # Fleet carrier Icy Rings and Pristine status
+        self.fleet_carrier_icy_rings_label.grid(row=row, column=0, padx=5, pady=2, sticky=tk.W)
+        self.fleet_carrier_icy_rings_cb.grid(row=row, column=1, padx=2, pady=2, sticky=tk.W)
+        self.fleet_carrier_pristine_label.grid(row=row, column=2, padx=5, pady=2, sticky=tk.W)
+        self.fleet_carrier_pristine_cb.grid(row=row, column=3, padx=2, pady=2, sticky=tk.W)
+        self.update_fleet_carrier_rings_status()
+        row += 1
+        # Fleet carrier Tritium display (clickable to search Inara)
+        self.fleet_carrier_tritium_label.grid(row=row, column=0, columnspan=2, padx=5, pady=2, sticky=tk.W)
+        self.fleet_carrier_tritium_label.bind("<Button-1>", lambda e: self.find_tritium_near_current_system())
+        self.fleet_carrier_tritium_label.bind("<Enter>", lambda e, lbl=self.fleet_carrier_tritium_label: lbl.config(fg="darkblue", underline=True))
+        self.fleet_carrier_tritium_label.bind("<Leave>", lambda e, lbl=self.fleet_carrier_tritium_label: lbl.config(fg="blue", underline=False))
+        self.update_fleet_carrier_tritium_display()
+        row += 1
+        # Fleet carrier Balance display
+        self.fleet_carrier_balance_label.grid(row=row, column=0, columnspan=2, padx=5, pady=2, sticky=tk.W)
+        self.update_fleet_carrier_balance_display()
+        row += 1
+        # Separator line
+        separator = tk.Frame(self.frame, height=1, bg="gray")
+        separator.grid(row=row, column=0, columnspan=2, sticky=tk.EW, padx=5, pady=2)
+        row += 1
+        # Route waypoint controls
         self.waypoint_prev_btn.grid(row=row, column=0, columnspan=2, padx=5, pady=10)
         self.dist_remaining_lbl.grid(row=row, column=2, padx=5, pady=10, sticky=tk.W)
         row += 1
@@ -115,9 +224,12 @@ class SpanshRouter():
         self.waypoint_next_btn.grid(row=row, column=0, columnspan=2, padx=5, pady=10)
         self.dist_next_lbl.grid(row=row, column=2, padx=5, pady=10, sticky=tk.W)
         row += 1
+        self.fuel_used_lbl.grid(row=row, column=2, padx=5, pady=2, sticky=tk.W)
+        row += 1
         self.bodies_lbl.grid(row=row, columnspan=2, sticky=tk.W)
         row += 1
-        self.fleetrestock_lbl.grid(row=row, columnspan=2, sticky=tk.W)
+        self.fleetrestock_lbl.grid(row=row, column=0, sticky=tk.W)
+        self.find_trit_btn.grid(row=row, column=1, padx=5, sticky=tk.W)
         row += 1
         self.refuel_lbl.grid(row=row,columnspan=2, sticky=tk.W)
         row += 1
@@ -132,6 +244,7 @@ class SpanshRouter():
         row += 1
         self.csv_route_btn.grid(row=row, pady=10, padx=0)
         self.plot_route_btn.grid(row=row, pady=10, padx=0)
+        self.view_route_btn.grid(row=row, pady=10, padx=0)
         self.plot_gui_btn.grid(row=row, column=1, pady=10, padx=5, sticky=tk.W)
         self.cancel_plot.grid(row=row, column=1, pady=10, padx=5, sticky=tk.E)
         row += 1
@@ -196,7 +309,7 @@ class SpanshRouter():
         route_widgets = [
             self.waypoint_prev_btn, self.waypoint_btn, self.waypoint_next_btn,
             self.jumpcounttxt_lbl, self.export_route_btn, self.clear_route_btn,
-            self.dist_prev_lbl, self.dist_next_lbl, self.dist_remaining_lbl
+            self.dist_prev_lbl, self.dist_next_lbl, self.fuel_used_lbl, self.dist_remaining_lbl
         ]
         
         plotting_widgets = [
@@ -206,16 +319,17 @@ class SpanshRouter():
         ]
         
         basic_controls = [
-            self.plot_gui_btn, self.csv_route_btn
+            self.plot_gui_btn, self.csv_route_btn, self.view_route_btn
         ]
         
         info_labels = [
-            self.bodies_lbl, self.fleetrestock_lbl, self.refuel_lbl
+            self.bodies_lbl, self.fleetrestock_lbl, self.refuel_lbl, self.find_trit_btn
         ]
         
-        # Hide all widgets first
+        # Hide all widgets first (except fleet carrier status which is always visible)
         for widget in route_widgets + plotting_widgets + basic_controls + info_labels:
-            widget.grid_remove()
+            if widget not in [self.fleet_carrier_status_label, self.fleet_carrier_combobox, self.fleet_carrier_details_btn, self.fleet_carrier_inara_btn, self.fleet_carrier_system_label, self.fleet_carrier_icy_rings_label, self.fleet_carrier_icy_rings_cb, self.fleet_carrier_pristine_label, self.fleet_carrier_pristine_cb, self.fleet_carrier_tritium_label, self.fleet_carrier_balance_label]:
+                widget.grid_remove()
         
         # Show widgets based on state
         if state == 'plotting':
@@ -243,10 +357,17 @@ class SpanshRouter():
                 self.dist_prev_lbl["text"] = self.dist_prev
                 self.dist_next_lbl["text"] = self.dist_next
                 self.dist_remaining_lbl["text"] = self.dist_remaining
+                # Update fuel used display (only if CSV has this column)
+                if self.has_fuel_used and self.fuel_used:
+                    self.fuel_used_lbl["text"] = f"Fuel Used: {self.fuel_used}"
+                    self.fuel_used_lbl.grid()
+                else:
+                    self.fuel_used_lbl.grid_remove()
             else:
                 self.jumpcounttxt_lbl.grid_remove()
                 self.dist_prev_lbl.grid_remove()
                 self.dist_next_lbl.grid_remove()
+                self.fuel_used_lbl.grid_remove()
                 self.dist_remaining_lbl.grid_remove()
             
             # Update waypoint button states
@@ -265,13 +386,8 @@ class SpanshRouter():
                 self.bodies_lbl["text"] = self.bodieslbl_txt + self.bodies
                 self.bodies_lbl.grid()
             
-            if self.fleetcarrier and self.offset > 0:
-                prev_waypoint = self.route[self.offset - 1]
-                if len(prev_waypoint) > 2:
-                    restock = prev_waypoint[-1]
-                    if restock and restock.lower() == "yes":
-                        self.fleetrestock_lbl["text"] = f"At: {prev_waypoint[0]}\n   {self.fleetstocklbl_txt}"
-                        self.fleetrestock_lbl.grid()
+            # Check if carrier is in a system that requires Tritium restock
+            self.check_fleet_carrier_restock_warning()
             
             if self.galaxy and self.pleaserefuel:
                 self.refuel_lbl['text'] = self.refuellbl_txt
@@ -424,6 +540,7 @@ class SpanshRouter():
         self.dist_prev = ""
         self.dist_next = ""
         self.dist_remaining = ""
+        self.fuel_used = ""
 
         if not (0 <= self.offset < len(self.route)):
             return
@@ -476,8 +593,34 @@ class SpanshRouter():
                 nv2 = safe_flt(nxt[1])
                 if nv2 is not None:
                     self.dist_next = f"Next waypoint jumps: {nv2:.2f}"
+            
+            # Extract Fuel Used from next waypoint if available
+            # For fleet carrier routes with has_fuel_used: [System, Jumps, Dist, Dist Rem, Restock Trit, Fuel Used, ...]
+            #   Fuel Used is at index 5
+            # For galaxy routes with has_fuel_used: [System, Refuel, Dist, Dist Rem, Fuel Used, ...]
+            #   Fuel Used is at index 4
+            # For generic routes with has_fuel_used: [System, Jumps, Fuel Used, ...]
+            #   Fuel Used is at index 2
+            if self.has_fuel_used:
+                fuel_used_value = None
+                if self.fleetcarrier and len(nxt) > 5:
+                    # Fleet carrier: Fuel Used is at index 5 (after System, Jumps, Dist, Dist Rem, Restock Trit)
+                    fuel_used_value = nxt[5] if nxt[5] else None
+                elif self.galaxy and len(nxt) > 4:
+                    # Galaxy route: Fuel Used is at index 4 (after System, Refuel, Dist, Dist Rem)
+                    fuel_used_value = nxt[4] if nxt[4] else None
+                else:
+                    # Generic route: Fuel Used might be at index 2 (after System, Jumps)
+                    if len(nxt) > 2:
+                        fuel_used_value = nxt[2] if nxt[2] else None
+                
+                if fuel_used_value and fuel_used_value.strip():
+                    self.fuel_used = fuel_used_value.strip()
+                else:
+                    self.fuel_used = ""
         else:
             self.dist_next = ""
+            self.fuel_used = ""
 
         # --- Total remaining ---
         # Prefer exact Distance Remaining at current row (index 3)
@@ -519,6 +662,87 @@ class SpanshRouter():
             else:
                 self.dist_remaining = ""
 
+    def find_current_waypoint_in_route(self):
+        """
+        Find the appropriate waypoint index based on current system location.
+        For fleet carrier routes: Uses the selected fleet carrier's location.
+        For non-fleet carrier routes: Uses the player's current system.
+        Searches through the route to find if the current location matches any waypoint system,
+        and returns the index of the next waypoint to visit.
+        
+        Returns:
+            int: Index of the next waypoint (0 if at start, or last index if at end)
+        """
+        if not self.route or len(self.route) == 0:
+            return 0
+        
+        # Determine which system to check based on route type
+        current_system = None
+        if self.fleetcarrier:
+            # For fleet carrier routes, use the selected fleet carrier's location
+            if self.selected_carrier_callsign and self.fleet_carrier_manager:
+                carrier = self.fleet_carrier_manager.get_carrier(self.selected_carrier_callsign)
+                if carrier:
+                    current_system = carrier.get('current_system', '')
+            # If no carrier selected or no carrier data, try to get the most recent carrier
+            if not current_system:
+                carriers = self.get_all_fleet_carriers()
+                if carriers:
+                    # Get the most recently updated carrier
+                    sorted_carriers = sorted(
+                        carriers,
+                        key=lambda x: x.get('last_updated', ''),
+                        reverse=True
+                    )
+                    carrier = sorted_carriers[0]
+                    current_system = carrier.get('current_system', '') if carrier else None
+        else:
+            # For non-fleet carrier routes, use the player's current system
+            current_system = monitor.state.get('SystemName')
+        
+        if not current_system:
+            # No current system info, start from beginning
+            return 0
+        
+        current_system_lower = current_system.lower()
+        
+        # Search through route from start to find the best match
+        # Strategy: Find the last waypoint we've already visited
+        # (i.e., where the system matches), then advance to the next one
+        found_index = -1
+        
+        for idx, waypoint in enumerate(self.route):
+            waypoint_system = waypoint[0] if waypoint and len(waypoint) > 0 else ""
+            if waypoint_system and waypoint_system.lower() == current_system_lower:
+                # Found a match - we're at this waypoint
+                found_index = idx
+        
+        if found_index >= 0:
+            # We're at a waypoint - advance to the next one
+            next_index = found_index + 1
+            if next_index >= len(self.route):
+                # We're at the last waypoint, stay there
+                next_index = len(self.route) - 1
+            
+            # Update jumps_left to account for skipping waypoints we've already passed
+            for idx in range(next_index):
+                if idx < len(self.route) and len(self.route[idx]) > 1:
+                    if self.route[idx][1] not in [None, "", []]:
+                        try:
+                            if not self.galaxy:
+                                self.jumps_left -= int(self.route[idx][1])
+                            else:
+                                self.jumps_left -= 1
+                        except (ValueError, TypeError):
+                            pass
+            
+            return next_index
+        else:
+            # Not at any waypoint - check if we're between waypoints
+            # For now, default to starting from the beginning
+            # Could enhance this later to check distance to nearest waypoint
+            return 0
+    
     def update_route(self, direction=1):
         # Guard: no route -> nothing to do
         if len(self.route) == 0:
@@ -572,6 +796,10 @@ class SpanshRouter():
 
             if self.galaxy:
                 self.pleaserefuel = self.route[self.offset][1] == "Yes"
+            
+            # Update fleet carrier restock warning when route changes
+            if self.fleetcarrier:
+                self.check_fleet_carrier_restock_warning()
 
             self.update_gui()
             self.copy_waypoint()
@@ -603,23 +831,8 @@ class SpanshRouter():
                     self.plot_edts(filename)
 
                 if ftype_supported:
-                    # Check if we're already in the first waypoint system
-                    # If so, automatically advance to the next waypoint
-                    current_system = monitor.state.get('SystemName')
-                    if self.route and current_system and self.route[0][0].lower() == current_system.lower():
-                        self.offset = 1 if len(self.route) > 1 else 0
-                        # Update jumps_left to account for skipping the first waypoint
-                        if self.offset > 0 and len(self.route[0]) > 1:
-                            if self.route[0][1] not in [None, "", []]:
-                                if not self.galaxy:
-                                    try:
-                                        self.jumps_left -= int(self.route[0][1])
-                                    except (ValueError, TypeError):
-                                        pass
-                                else:
-                                    self.jumps_left -= 1
-                    else:
-                        self.offset = 0
+                    # Find where we are in the route based on current system location
+                    self.offset = self.find_current_waypoint_in_route()
                     
                     self.next_stop = self.route[self.offset][0] if self.route else ""
                     if self.galaxy:
@@ -628,6 +841,9 @@ class SpanshRouter():
                     self.compute_distances()
                     self.copy_waypoint()
                     self.update_gui()
+                    # Check fleet carrier restock warning
+                    if self.fleetcarrier and hasattr(self, 'check_fleet_carrier_restock_warning'):
+                        self.check_fleet_carrier_restock_warning()
                     self.save_all_route()
                 else:
                     self.show_error("Unsupported file type")
@@ -644,6 +860,7 @@ class SpanshRouter():
 
             if clear_previous_route:
                 self.clear_route(False)
+                self.has_fuel_used = False  # Reset flag when clearing route
 
             route_reader = csv.DictReader(csvfile)
             fieldnames = route_reader.fieldnames if route_reader.fieldnames else []
@@ -748,23 +965,35 @@ class SpanshRouter():
             # --- EXTERNAL fleetcarrier import (WITH LY SUPPORT) ---
             elif headerline_lower == fleetcarrierimportheader.lower():
                 self.fleetcarrier = True
+                self.has_fuel_used = has_field('Fuel Used')
 
                 for row in route_reader:
                     if row not in (None, "", []):
                         dist_to_arrival, dist_remaining = get_distance_fields(row)
 
-                        self.route.append([
+                        route_entry = [
                             get_field(row, self.system_header),
                             1,  # every row = one carrier jump
                             dist_to_arrival,
                             dist_remaining,
                             get_field(row, self.restocktritium_header, "")
-                        ])
+                        ]
+                        # Store Fuel Used if present
+                        if self.has_fuel_used:
+                            route_entry.append(get_field(row, 'Fuel Used', ''))
+                        # Store Icy Ring and Pristine if present (for route view window)
+                        if has_field('Icy Ring'):
+                            route_entry.append(get_field(row, 'Icy Ring', ''))
+                        if has_field('Pristine'):
+                            route_entry.append(get_field(row, 'Pristine', ''))
+                        
+                        self.route.append(route_entry)
                         self.jumps_left += 1
 
             # --- galaxy ---
             elif has_field("Refuel") and has_field(self.system_header):
                 self.galaxy = True
+                self.has_fuel_used = has_field('Fuel Used')
 
                 for row in route_reader:
                     if row not in (None, "", []):
@@ -778,43 +1007,56 @@ class SpanshRouter():
                         if dist_to_arrival or dist_remaining:
                             route_row.append(dist_to_arrival)
                             route_row.append(dist_remaining)
+                        
+                        # Store Fuel Used if present (typically after Fuel Left)
+                        if self.has_fuel_used:
+                            route_row.append(get_field(row, 'Fuel Used', ''))
 
                         self.route.append(route_row)
                         self.jumps_left += 1
 
             else:
+                # Generic CSV import - check if it's a fleet carrier route with Icy Ring/Pristine
+                has_icy_ring_in_file = has_field('Icy Ring')
+                has_pristine_in_file = has_field('Pristine')
+                if has_icy_ring_in_file or has_pristine_in_file:
+                    self.fleetcarrier = True
+                
+                # Check if Fuel Used column exists
+                self.has_fuel_used = has_field('Fuel Used')
+                
                 for row in route_reader:
                     if row not in (None, "", []):
                         system = get_field(row, self.system_header, "")
                         jumps = get_field(row, self.jumps_header, "")
-                        self.route.append([system, jumps])
+                        route_entry = [system, jumps]
+                        
+                        # Add Fuel Used if present (before Icy Ring/Pristine to maintain consistent order)
+                        if self.has_fuel_used:
+                            route_entry.append(get_field(row, 'Fuel Used', ''))
+                        
+                        # Add Icy Ring and Pristine if present
+                        if has_icy_ring_in_file:
+                            route_entry.append(get_field(row, 'Icy Ring', ''))
+                        if has_pristine_in_file:
+                            route_entry.append(get_field(row, 'Pristine', ''))
+                        
+                        self.route.append(route_entry)
                         try:
                             self.jumps_left += int(jumps) if jumps else 0
                         except (ValueError, TypeError):
                             pass
 
             if self.route:
-                # Check if we're already in the first waypoint system
-                # If so, automatically advance to the next waypoint
-                current_system = monitor.state.get('SystemName')
-                if current_system and self.route[0][0].lower() == current_system.lower():
-                    self.offset = 1 if len(self.route) > 1 else 0
-                    # Update jumps_left to account for skipping the first waypoint
-                    if self.offset > 0 and len(self.route[0]) > 1:
-                        if self.route[0][1] not in [None, "", []]:
-                            if not self.galaxy:
-                                try:
-                                    self.jumps_left -= int(self.route[0][1])
-                                except (ValueError, TypeError):
-                                    pass
-                            else:
-                                self.jumps_left -= 1
-                else:
-                    self.offset = 0
+                # Find where we are in the route based on current system location
+                self.offset = self.find_current_waypoint_in_route()
                 
                 self.next_stop = self.route[self.offset][0]
                 self.compute_distances()
                 self.update_gui()
+                # Check fleet carrier restock warning
+                if self.fleetcarrier and hasattr(self, 'check_fleet_carrier_restock_warning'):
+                    self.check_fleet_carrier_restock_warning()
 
     def plot_route(self):
         self.hide_error()
@@ -968,6 +1210,9 @@ class SpanshRouter():
                 self.compute_distances()
                 self.copy_waypoint()
                 self.update_gui()
+                # Check fleet carrier restock warning
+                if self.fleetcarrier and hasattr(self, 'check_fleet_carrier_restock_warning'):
+                    self.check_fleet_carrier_restock_warning()
                 self.save_all_route()
                 return
 
@@ -1095,6 +1340,10 @@ class SpanshRouter():
 
             # --- Fleet carrier (WITH DISTANCES) ---
             if self.fleetcarrier:
+                # Check if route entries have Icy Ring/Pristine data (indices 5 and 6)
+                has_icy_ring_in_route = any(len(row) > 5 and row[5] for row in self.route)
+                has_pristine_in_route = any(len(row) > 6 and row[6] for row in self.route)
+                
                 fieldnames = [
                     self.system_header,
                     self.jumps_header,
@@ -1102,17 +1351,27 @@ class SpanshRouter():
                     "Distance Remaining",
                     self.restocktritium_header
                 ]
+                if has_icy_ring_in_route:
+                    fieldnames.append("Icy Ring")
+                if has_pristine_in_route:
+                    fieldnames.append("Pristine")
+                
                 with open(self.save_route_path, 'w', newline='') as csvfile:
                     writer = csv.writer(csvfile)
                     writer.writerow(fieldnames)
                     for row in self.route:
-                        writer.writerow([
+                        writerow_data = [
                             row[0],
                             row[1],
                             row[2] if len(row) > 2 else "",
                             row[3] if len(row) > 3 else "",
                             row[4] if len(row) > 4 else ""
-                        ])
+                        ]
+                        if has_icy_ring_in_route:
+                            writerow_data.append(row[5] if len(row) > 5 else "")
+                        if has_pristine_in_route:
+                            writerow_data.append(row[6] if len(row) > 6 else "")
+                        writer.writerow(writerow_data)
                 return
 
             # --- Galaxy ---
@@ -1243,15 +1502,25 @@ class SpanshRouter():
                 logger.warning('!! ' + traceback.format_exc(), exc_info=False)
 
     def check_for_update(self):
-        return  # Autoupdates is disabled
+        # Auto-updates enabled
+        # GitHub repository configuration
+        github_repo = "Fenris159/EDMC_SpanshRouter"  # Format: "username/repository"
+        github_branch = "master"  # Your default branch name (master, main, etc.)
+        
         self.cleanup_old_version()
-        version_url = "https://raw.githubusercontent.com/CMDR-Kiel42/EDMC_SpanshRouter/master/version.json"
+        version_url = f"https://raw.githubusercontent.com/{github_repo}/{github_branch}/version.json"
         try:
             response = requests.get(version_url, timeout=2)
             if response.status_code == 200:
-                if self.plugin_version != response.text:
+                remote_version_content = response.text.strip()
+                try:
+                    remote_version = json.loads(remote_version_content)
+                except json.JSONDecodeError:
+                    # Fallback: if it's not valid JSON, treat as plain text (remove quotes if present)
+                    remote_version = remote_version_content.strip('"\'')
+                if self.plugin_version != remote_version:
                     self.update_available = True
-                    self.spansh_updater = SpanshUpdater(response.text, self.plugin_dir)
+                    self.spansh_updater = SpanshUpdater(remote_version, self.plugin_dir)
 
             else:
                 logger.warning(f"Could not query latest SpanshRouter version, code: {str(response.status_code)}; text: {response.text}")
@@ -1260,3 +1529,1056 @@ class SpanshRouter():
 
     def install_update(self):
         self.spansh_updater.install()
+
+    #   -- Fleet Carrier CAPI Integration --
+    
+    def get_fleet_carrier(self, callsign: str):
+        """
+        Get fleet carrier information by callsign.
+        
+        Args:
+            callsign: Fleet carrier callsign (e.g., "A1A-A1A")
+            
+        Returns:
+            Dictionary with carrier information or None if not found
+        """
+        if self.fleet_carrier_manager:
+            return self.fleet_carrier_manager.get_carrier(callsign)
+        return None
+    
+    def get_all_fleet_carriers(self):
+        """
+        Get all fleet carriers stored in CSV.
+        
+        Returns:
+            List of carrier dictionaries
+        """
+        if self.fleet_carrier_manager:
+            return self.fleet_carrier_manager.get_all_carriers()
+        return []
+    
+    def get_fleet_carriers_in_system(self, system_name: str):
+        """
+        Get all fleet carriers in a specific system.
+        
+        Args:
+            system_name: System name to search for
+            
+        Returns:
+            List of carrier dictionaries in that system
+        """
+        if self.fleet_carrier_manager:
+            return self.fleet_carrier_manager.get_carrier_by_system(system_name)
+        return []
+    
+    def update_fleet_carrier_dropdown(self):
+        """
+        Update the fleet carrier dropdown with available carriers.
+        """
+        if not self.fleet_carrier_combobox:
+            return
+        
+        try:
+            carriers = self.get_all_fleet_carriers()
+            if carriers:
+                # Create display strings for dropdown
+                carrier_options = []
+                for carrier in sorted(carriers, key=lambda x: x.get('last_updated', ''), reverse=True):
+                    callsign = carrier.get('callsign', 'Unknown')
+                    name = carrier.get('name', '')
+                    system = carrier.get('current_system', 'Unknown')
+                    fuel = carrier.get('fuel', '0')
+                    
+                    display_name = f"{name} ({callsign})" if name else callsign
+                    display_text = f"{display_name} | {system} | Tritium: {fuel}"
+                    carrier_options.append(display_text)
+                
+                self.fleet_carrier_combobox['values'] = carrier_options
+                
+                # Set default selection to first (most recent) carrier
+                if carrier_options and not self.selected_carrier_callsign:
+                    self.fleet_carrier_combobox.current(0)
+                    self.on_carrier_selected()
+                    # Enable Inara button if carrier is selected
+                    if self.fleet_carrier_inara_btn:
+                        self.fleet_carrier_inara_btn.config(state=tk.NORMAL)
+            else:
+                self.fleet_carrier_combobox['values'] = ["No carrier data"]
+                self.fleet_carrier_combobox.current(0)
+                # Disable Inara button if no carrier data
+                if self.fleet_carrier_inara_btn:
+                    self.fleet_carrier_inara_btn.config(state=tk.DISABLED)
+        except Exception:
+            logger.warning('!! Error updating fleet carrier dropdown: ' + traceback.format_exc(), exc_info=False)
+            self.fleet_carrier_combobox['values'] = ["Error loading carrier data"]
+    
+    def on_carrier_selected(self, event=None):
+        """
+        Handle carrier selection from dropdown.
+        """
+        try:
+            selection = self.fleet_carrier_var.get()
+            if not selection or selection == "No carrier data" or selection == "Error loading carrier data":
+                self.selected_carrier_callsign = None
+                # Disable Inara button if no carrier selected
+                if self.fleet_carrier_inara_btn:
+                    self.fleet_carrier_inara_btn.config(state=tk.DISABLED)
+                # Update warning check and system display
+                if hasattr(self, 'check_fleet_carrier_restock_warning'):
+                    self.check_fleet_carrier_restock_warning()
+                if hasattr(self, 'update_fleet_carrier_system_display'):
+                    self.update_fleet_carrier_system_display()
+                if hasattr(self, 'update_fleet_carrier_rings_status'):
+                    self.update_fleet_carrier_rings_status()
+                if hasattr(self, 'update_fleet_carrier_balance_display'):
+                    self.update_fleet_carrier_balance_display()
+                return
+            
+            # Extract callsign from selection (format: "Name (CALLSIGN) | System | ...")
+            # Try to find the callsign in parentheses
+            match = re.search(r'\(([A-Z0-9]+-[A-Z0-9]+)\)', selection)
+            if match:
+                self.selected_carrier_callsign = match.group(1)
+            else:
+                # Fallback: try to extract from start if no name
+                parts = selection.split(' | ')
+                if parts:
+                    self.selected_carrier_callsign = parts[0].strip()
+            
+            # Enable Inara button when carrier is selected
+            if self.fleet_carrier_inara_btn and self.selected_carrier_callsign:
+                self.fleet_carrier_inara_btn.config(state=tk.NORMAL)
+            
+                # Update warning check, system display, rings status, Tritium display, and balance display when carrier selection changes
+            if hasattr(self, 'check_fleet_carrier_restock_warning'):
+                self.check_fleet_carrier_restock_warning()
+            if hasattr(self, 'update_fleet_carrier_system_display'):
+                self.update_fleet_carrier_system_display()
+            if hasattr(self, 'update_fleet_carrier_rings_status'):
+                self.update_fleet_carrier_rings_status()
+            if hasattr(self, 'update_fleet_carrier_tritium_display'):
+                self.update_fleet_carrier_tritium_display()
+            if hasattr(self, 'update_fleet_carrier_balance_display'):
+                self.update_fleet_carrier_balance_display()
+        except Exception:
+            logger.warning('!! Error handling carrier selection: ' + traceback.format_exc(), exc_info=False)
+    
+    def open_selected_carrier_inara(self):
+        """
+        Open Inara.cz page for the currently selected fleet carrier in the dropdown.
+        """
+        try:
+            if not self.selected_carrier_callsign:
+                confirmDialog.showwarning("No Carrier Selected", "Please select a fleet carrier first.")
+                return
+            
+            self.open_inara_carrier(self.selected_carrier_callsign)
+        except Exception:
+            logger.warning('!! Error opening selected carrier Inara page: ' + traceback.format_exc(), exc_info=False)
+            confirmDialog.showerror("Error", "Failed to open Inara page.")
+    
+    def select_carrier_from_details(self, callsign: str, details_window=None):
+        """
+        Select a carrier from the details window and update the dropdown.
+        
+        Args:
+            callsign: The callsign of the carrier to select
+            details_window: Optional reference to the details window (to refresh if needed)
+        """
+        try:
+            if not callsign or not self.fleet_carrier_combobox:
+                return
+            
+            # Find the matching carrier option in the dropdown
+            dropdown_values = self.fleet_carrier_combobox['values']
+            selected_index = None
+            
+            for idx, option in enumerate(dropdown_values):
+                # Extract callsign from option (format: "Name (CALLSIGN) | System | ...")
+                match = re.search(r'\(([A-Z0-9]+-[A-Z0-9]+)\)', option)
+                if match and match.group(1) == callsign:
+                    selected_index = idx
+                    break
+            
+            # If found, select it in the dropdown
+            if selected_index is not None:
+                self.fleet_carrier_combobox.current(selected_index)
+                # Trigger the selection handler
+                self.on_carrier_selected()
+                logger.info(f"Selected carrier {callsign} from details window")
+            else:
+                # Fallback: try to set directly by callsign matching
+                self.selected_carrier_callsign = callsign
+                # Update dropdown if we can find a match
+                self.update_fleet_carrier_dropdown()
+                # Find and set the current selection
+                for idx, option in enumerate(self.fleet_carrier_combobox['values']):
+                    match = re.search(r'\(([A-Z0-9]+-[A-Z0-9]+)\)', option)
+                    if match and match.group(1) == callsign:
+                        self.fleet_carrier_combobox.current(idx)
+                        self.on_carrier_selected()
+                        break
+                
+        except Exception:
+            logger.warning(f'!! Error selecting carrier {callsign} from details window: ' + traceback.format_exc(), exc_info=False)
+    
+    def show_carrier_details_window(self):
+        """
+        Open a window displaying all fleet carriers with details and Inara.cz links.
+        """
+        try:
+            carriers = self.get_all_fleet_carriers()
+            if not carriers:
+                confirmDialog.showinfo("Fleet Carriers", "No fleet carrier data available.")
+                return
+            
+            # Create new window
+            details_window = tk.Toplevel(self.parent)
+            details_window.title("Fleet Carrier Details")
+            
+            # Define headers and column widths first
+            headers = ["Select", "Callsign", "Name", "System", "Tritium", "Balance", "Cargo", "State", "Theme", "Icy Rings", "Pristine", "Docking Access", "Notorious Access", "Last Updated"]
+            column_widths = [8, 12, 20, 20, 15, 15, 20, 15, 15, 12, 12, 15, 18, 20]
+            
+            # Calculate required width based on columns
+            # Estimate width: column_widths * 10 (approximate pixels per character) + padding
+            total_column_width = sum(column_widths) * 10 + 150  # Add padding for buttons/scrollbars
+            screen_width = details_window.winfo_screenwidth()
+            window_width = min(total_column_width, screen_width - 50)  # Leave 50px margin from screen edges
+            
+            # Create main container with horizontal and vertical scrolling
+            main_frame = tk.Frame(details_window, bg="white")
+            main_frame.pack(fill=tk.BOTH, expand=True)
+            
+            # Create horizontal scrollbar
+            h_scrollbar = ttk.Scrollbar(main_frame, orient=tk.HORIZONTAL)
+            h_scrollbar.pack(side=tk.BOTTOM, fill=tk.X)
+            
+            # Create vertical scrollbar
+            v_scrollbar = ttk.Scrollbar(main_frame, orient=tk.VERTICAL)
+            v_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+            
+            # Create canvas with both scrollbars
+            canvas = tk.Canvas(main_frame, bg="white", 
+                             xscrollcommand=h_scrollbar.set,
+                             yscrollcommand=v_scrollbar.set)
+            canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+            
+            h_scrollbar.config(command=canvas.xview)
+            v_scrollbar.config(command=canvas.yview)
+            
+            scrollable_frame = tk.Frame(canvas, bg="white")
+            
+            canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
+            
+            # Update canvas scroll region when frame size changes
+            def on_frame_configure(event):
+                canvas.configure(scrollregion=canvas.bbox("all"))
+                # Update canvas window width to match canvas width for proper horizontal scrolling
+                canvas_width = canvas.winfo_width()
+                if canvas_width > 1:  # Only update if canvas has been rendered
+                    canvas_window_id = canvas.find_all()
+                    if canvas_window_id:
+                        canvas.itemconfig(canvas_window_id[0], width=canvas_width)
+            
+            scrollable_frame.bind("<Configure>", on_frame_configure)
+            
+            # Also bind to canvas resize
+            def on_canvas_configure(event):
+                canvas_width = event.width
+                canvas_window_id = canvas.find_all()
+                if canvas_window_id:
+                    canvas.itemconfig(canvas_window_id[0], width=canvas_width)
+            
+            canvas.bind('<Configure>', on_canvas_configure)
+            
+            # Header
+            header_frame = tk.Frame(scrollable_frame, bg="lightgray", relief=tk.RAISED, borderwidth=1)
+            header_frame.pack(fill=tk.X, padx=5, pady=5)
+            for i, header in enumerate(headers):
+                label = tk.Label(header_frame, text=header, font=("Arial", 9, "bold"), bg="lightgray", width=column_widths[i])
+                label.grid(row=0, column=i, padx=2, pady=5, sticky=tk.W)
+            
+            # Carrier rows
+            for idx, carrier in enumerate(sorted(carriers, key=lambda x: x.get('last_updated', ''), reverse=True)):
+                row_frame = tk.Frame(scrollable_frame, relief=tk.RIDGE, borderwidth=1)
+                row_frame.pack(fill=tk.X, padx=5, pady=2)
+                
+                callsign = carrier.get('callsign', 'Unknown')
+                name = carrier.get('name', '') or 'Unnamed'
+                system = carrier.get('current_system', 'Unknown')
+                fuel = carrier.get('fuel', '0')
+                tritium_cargo = carrier.get('tritium_in_cargo', '0')
+                balance = carrier.get('balance', '0')
+                cargo_count = carrier.get('cargo_count', '0')
+                cargo_value = carrier.get('cargo_total_value', '0')
+                state = carrier.get('state', 'Unknown')
+                theme = carrier.get('theme', 'Unknown')
+                icy_rings = carrier.get('icy_rings', '')
+                pristine = carrier.get('pristine', '')
+                docking_access = carrier.get('docking_access', '')
+                notorious_access = carrier.get('notorious_access', '')
+                last_updated = carrier.get('last_updated', 'Unknown')
+                
+                # Format balance and cargo value
+                try:
+                    balance_formatted = f"{int(balance):,}" if balance else "0"
+                    cargo_value_formatted = f"{int(cargo_value):,}" if cargo_value else "0"
+                except (ValueError, TypeError):
+                    balance_formatted = balance
+                    cargo_value_formatted = cargo_value
+                
+                cargo_text = f"{cargo_count} ({cargo_value_formatted} cr)"
+                
+                # Format Tritium: fuel / cargo (or just fuel if no cargo)
+                if tritium_cargo and tritium_cargo != '0':
+                    tritium_text = f"{fuel} / {tritium_cargo}"
+                else:
+                    tritium_text = fuel
+                
+                # Select button - updates dropdown to select this carrier
+                select_btn = tk.Button(
+                    row_frame,
+                    text="Select",
+                    command=lambda c=callsign: self.select_carrier_from_details(c, details_window),
+                    width=8,
+                    relief=tk.RAISED
+                )
+                select_btn.grid(row=0, column=0, padx=2, pady=5, sticky=tk.W)
+                
+                # Highlight if this is the currently selected carrier
+                if callsign == self.selected_carrier_callsign:
+                    select_btn.config(bg="lightgreen", text="Selected")
+                
+                # Callsign (clickable to Inara)
+                callsign_label = tk.Label(row_frame, text=callsign, fg="blue", cursor="hand2", width=12, anchor="w")
+                callsign_label.grid(row=0, column=1, padx=2, pady=5, sticky=tk.W)
+                callsign_label.bind("<Button-1>", lambda e, c=callsign: self.open_inara_carrier(c))
+                callsign_label.bind("<Enter>", lambda e, lbl=callsign_label: lbl.config(fg="darkblue", underline=True))
+                callsign_label.bind("<Leave>", lambda e, lbl=callsign_label: lbl.config(fg="blue", underline=False))
+                
+                # Name (clickable to Inara)
+                name_label = tk.Label(row_frame, text=name, fg="blue", cursor="hand2", width=20, anchor="w")
+                name_label.grid(row=0, column=2, padx=2, pady=5, sticky=tk.W)
+                name_label.bind("<Button-1>", lambda e, c=callsign: self.open_inara_carrier(c))
+                name_label.bind("<Enter>", lambda e, lbl=name_label: lbl.config(fg="darkblue", underline=True))
+                name_label.bind("<Leave>", lambda e, lbl=name_label: lbl.config(fg="blue", underline=False))
+                
+                # System (clickable to Inara)
+                system_label = tk.Label(row_frame, text=system, fg="blue", cursor="hand2", width=20, anchor="w")
+                system_label.grid(row=0, column=3, padx=2, pady=5, sticky=tk.W)
+                system_label.bind("<Button-1>", lambda e, s=system: self.open_inara_system(s))
+                system_label.bind("<Enter>", lambda e, lbl=system_label: lbl.config(fg="darkblue", underline=True))
+                system_label.bind("<Leave>", lambda e, lbl=system_label: lbl.config(fg="blue", underline=False))
+                
+                # Tritium (fuel / cargo)
+                tk.Label(row_frame, text=tritium_text, width=15, anchor="w").grid(row=0, column=4, padx=2, pady=5, sticky=tk.W)
+                
+                # Balance
+                tk.Label(row_frame, text=balance_formatted, width=15, anchor="w").grid(row=0, column=5, padx=2, pady=5, sticky=tk.W)
+                
+                # Cargo
+                tk.Label(row_frame, text=cargo_text, width=20, anchor="w").grid(row=0, column=6, padx=2, pady=5, sticky=tk.W)
+                
+                # State
+                tk.Label(row_frame, text=state, width=15, anchor="w").grid(row=0, column=7, padx=2, pady=5, sticky=tk.W)
+                
+                # Theme
+                tk.Label(row_frame, text=theme, width=15, anchor="w").grid(row=0, column=8, padx=2, pady=5, sticky=tk.W)
+                
+                # Icy Rings (read-only checkbox)
+                icy_rings_value = icy_rings.lower() == 'yes' if icy_rings else False
+                icy_rings_var = tk.BooleanVar(value=icy_rings_value)
+                icy_rings_cb = tk.Checkbutton(row_frame, variable=icy_rings_var, state=tk.DISABLED, text="", width=12, anchor="w")
+                icy_rings_cb.grid(row=0, column=9, padx=2, pady=5, sticky=tk.W)
+                
+                # Pristine (read-only checkbox)
+                pristine_value = pristine.lower() == 'yes' if pristine else False
+                pristine_var = tk.BooleanVar(value=pristine_value)
+                pristine_cb = tk.Checkbutton(row_frame, variable=pristine_var, state=tk.DISABLED, text="", width=12, anchor="w")
+                pristine_cb.grid(row=0, column=10, padx=2, pady=5, sticky=tk.W)
+                
+                # Docking Access (read-only checkbox)
+                docking_access_value = docking_access.lower() in ['yes', 'all', 'friends', 'squadron'] if docking_access else False
+                docking_access_var = tk.BooleanVar(value=docking_access_value)
+                docking_access_cb = tk.Checkbutton(row_frame, variable=docking_access_var, state=tk.DISABLED, text="", width=15, anchor="w")
+                docking_access_cb.grid(row=0, column=11, padx=2, pady=5, sticky=tk.W)
+                
+                # Notorious Access (read-only checkbox)
+                notorious_access_value = notorious_access.lower() in ['true', 'yes', '1'] if isinstance(notorious_access, str) else bool(notorious_access) if notorious_access else False
+                notorious_access_var = tk.BooleanVar(value=notorious_access_value)
+                notorious_access_cb = tk.Checkbutton(row_frame, variable=notorious_access_var, state=tk.DISABLED, text="", width=18, anchor="w")
+                notorious_access_cb.grid(row=0, column=12, padx=2, pady=5, sticky=tk.W)
+                
+                # Last Updated
+                tk.Label(row_frame, text=last_updated, width=20, anchor="w").grid(row=0, column=13, padx=2, pady=5, sticky=tk.W)
+            
+            # Finalize window setup after all widgets are created
+            canvas.update_idletasks()
+            canvas.configure(scrollregion=canvas.bbox("all"))
+            
+            # Set window size
+            details_window.geometry(f"{window_width}x600")
+            details_window.minsize(400, 400)  # Minimum size
+            
+            # Close button (outside scrollable area)
+            close_btn_frame = tk.Frame(details_window, bg="white")
+            close_btn_frame.pack(pady=5)
+            close_btn = tk.Button(close_btn_frame, text="Close", command=details_window.destroy)
+            close_btn.pack()
+            
+        except Exception:
+            logger.warning('!! Error showing carrier details window: ' + traceback.format_exc(), exc_info=False)
+            confirmDialog.showerror("Error", "Failed to display carrier details.")
+    
+    def open_inara_carrier(self, callsign: str):
+        """
+        Open Inara.cz page for a fleet carrier.
+        
+        Args:
+            callsign: Fleet carrier callsign (may contain spaces or special characters)
+        
+        Note: urllib.parse.quote() properly URL-encodes spaces (%20) and special characters
+        """
+        try:
+            # Inara fleet carrier search URL format
+            # We'll use the search function since direct carrier URLs may vary
+            # urllib.parse.quote() handles spaces, special chars, and unicode properly
+            # e.g., "My Carrier" becomes "My%20Carrier"
+            encoded_callsign = urllib.parse.quote(callsign)
+            url = f"https://inara.cz/elite/fleetcarrier/?search={encoded_callsign}"
+            webbrowser.open(url)
+        except Exception:
+            logger.warning(f'!! Error opening Inara carrier page for {callsign}: ' + traceback.format_exc(), exc_info=False)
+    
+    def open_inara_system(self, system_name: str):
+        """
+        Open Inara.cz page for a system.
+        
+        Args:
+            system_name: System name (may contain spaces or special characters)
+        
+        Note: urllib.parse.quote() properly URL-encodes spaces (%20) and special characters
+        """
+        try:
+            # Inara system URL format: https://inara.cz/elite/system/?search=SYSTEMNAME
+            # urllib.parse.quote() handles spaces, special chars, and unicode properly
+            # e.g., "Sol" stays "Sol", "Alpha Centauri" becomes "Alpha%20Centauri"
+            encoded_name = urllib.parse.quote(system_name)
+            url = f"https://inara.cz/elite/system/?search={encoded_name}"
+            webbrowser.open(url)
+        except Exception:
+            logger.warning(f'!! Error opening Inara system page for {system_name}: ' + traceback.format_exc(), exc_info=False)
+    
+    def check_fleet_carrier_restock_warning(self):
+        """
+        Check if the fleet carrier is currently in a system that requires Tritium restock
+        based on the route CSV. Shows warning and "Find Trit" button if needed.
+        """
+        if not self.fleetcarrier or not self.route:
+            self.fleetrestock_lbl.grid_remove()
+            self.find_trit_btn.grid_remove()
+            return
+        
+        # Get the currently selected carrier's system
+        carrier_system = None
+        if self.selected_carrier_callsign and self.fleet_carrier_manager:
+            carrier = self.fleet_carrier_manager.get_carrier(self.selected_carrier_callsign)
+            if carrier:
+                carrier_system = carrier.get('current_system', '').strip()
+        
+        # If no carrier selected, try to get the first/primary carrier
+        if not carrier_system:
+            carriers = self.get_all_fleet_carriers()
+            if carriers:
+                # Get the most recently updated carrier
+                sorted_carriers = sorted(
+                    carriers,
+                    key=lambda x: x.get('last_updated', ''),
+                    reverse=True
+                )
+                carrier_system = sorted_carriers[0].get('current_system', '').strip()
+        
+        # Check if any route entry matches carrier's current system and has "Restock Tritium" = "Yes"
+        if carrier_system:
+            for route_entry in self.route:
+                route_system = route_entry[0].strip() if len(route_entry) > 0 else ""
+                
+                # Check if system names match (case-insensitive)
+                if route_system.lower() == carrier_system.lower():
+                    # Check if this route entry has "Restock Tritium" = "Yes"
+                    # For fleet carrier routes, the "Restock Tritium" is typically the last column
+                    if len(route_entry) > 2:
+                        restock_value = route_entry[-1].strip().lower() if route_entry[-1] else ""
+                        if restock_value == "yes":
+                            # Show warning (without system name, it's shown separately)
+                            self.fleetrestock_lbl["text"] = self.fleetstocklbl_txt
+                            self.fleetrestock_lbl.grid()
+                            self.find_trit_btn.grid()
+                            return
+        
+        # Hide if no match found
+        self.fleetrestock_lbl.grid_remove()
+        self.find_trit_btn.grid_remove()
+    
+    def find_tritium_on_inara(self):
+        """
+        Open Inara.cz commodity search for Tritium near the carrier's current system.
+        """
+        try:
+            # Get the currently selected carrier's system
+            carrier_system = None
+            if self.selected_carrier_callsign and self.fleet_carrier_manager:
+                carrier = self.fleet_carrier_manager.get_carrier(self.selected_carrier_callsign)
+                if carrier:
+                    carrier_system = carrier.get('current_system', '').strip()
+            
+            # If no carrier selected, try to get the first/primary carrier
+            if not carrier_system:
+                carriers = self.get_all_fleet_carriers()
+                if carriers:
+                    sorted_carriers = sorted(
+                        carriers,
+                        key=lambda x: x.get('last_updated', ''),
+                        reverse=True
+                    )
+                    carrier_system = sorted_carriers[0].get('current_system', '').strip()
+            
+            if not carrier_system:
+                confirmDialog.showwarning("No System", "Could not determine carrier's current system.")
+                return
+            
+            # Inara.cz commodity search URL format
+            # https://inara.cz/elite/commodities/?search=Tritium&nearstarsystem=SYSTEMNAME
+            encoded_system = urllib.parse.quote(carrier_system)
+            encoded_commodity = urllib.parse.quote("Tritium")
+            url = f"https://inara.cz/elite/commodities/?search={encoded_commodity}&nearstarsystem={encoded_system}"
+            webbrowser.open(url)
+            
+        except Exception:
+            logger.warning('!! Error opening Inara Tritium search: ' + traceback.format_exc(), exc_info=False)
+            confirmDialog.showerror("Error", "Failed to open Inara Tritium search.")
+    
+    def update_fleet_carrier_system_display(self):
+        """
+        Update the fleet carrier system location display under the dropdown.
+        """
+        if not self.fleet_carrier_system_label:
+            return
+        
+        try:
+            # Get the currently selected carrier's system
+            carrier_system = None
+            if self.selected_carrier_callsign and self.fleet_carrier_manager:
+                carrier = self.fleet_carrier_manager.get_carrier(self.selected_carrier_callsign)
+                if carrier:
+                    carrier_system = carrier.get('current_system', '').strip()
+            
+            # If no carrier selected, try to get the first/primary carrier
+            if not carrier_system:
+                carriers = self.get_all_fleet_carriers()
+                if carriers:
+                    # Get the most recently updated carrier
+                    sorted_carriers = sorted(
+                        carriers,
+                        key=lambda x: x.get('last_updated', ''),
+                        reverse=True
+                    )
+                    carrier_system = sorted_carriers[0].get('current_system', '').strip()
+            
+            if carrier_system:
+                self.fleet_carrier_system_label.config(text=f"System: {carrier_system}", foreground="")
+            else:
+                self.fleet_carrier_system_label.config(text="System: Unknown", foreground="gray")
+        except Exception:
+            logger.warning('!! Error updating fleet carrier system display: ' + traceback.format_exc(), exc_info=False)
+            self.fleet_carrier_system_label.config(text="System: Error", foreground="red")
+    
+    def find_tritium_near_current_system(self):
+        """
+        Open Inara.cz commodity search for Tritium near the player's current system (from EDMC).
+        """
+        try:
+            # Get the player's current system from EDMC monitor state
+            current_system = monitor.state.get('SystemName')
+            
+            if not current_system:
+                confirmDialog.showwarning("No System", "Could not determine your current system location.")
+                return
+            
+            # Inara.cz commodity search URL format
+            # https://inara.cz/elite/commodities/?search=Tritium&nearstarsystem=SYSTEMNAME
+            encoded_system = urllib.parse.quote(current_system)
+            encoded_commodity = urllib.parse.quote("Tritium")
+            url = f"https://inara.cz/elite/commodities/?search={encoded_commodity}&nearstarsystem={encoded_system}"
+            webbrowser.open(url)
+            
+        except Exception:
+            logger.warning('!! Error opening Inara Tritium search near current system: ' + traceback.format_exc(), exc_info=False)
+            confirmDialog.showerror("Error", "Failed to open Inara Tritium search.")
+    
+    def update_fleet_carrier_rings_status(self):
+        """
+        Update the Icy Rings and Pristine checkboxes from CSV data.
+        Only queries EDSM API if data is missing from CSV (e.g., after system change or initial load).
+        Updates are stored back to the CSV managed by FleetCarrierManager.
+        """
+        if not self.fleet_carrier_icy_rings_cb or not self.fleet_carrier_pristine_cb:
+            return
+        
+        try:
+            # Get the currently selected carrier
+            carrier = None
+            callsign = None
+            
+            if self.selected_carrier_callsign and self.fleet_carrier_manager:
+                callsign = self.selected_carrier_callsign
+                carrier = self.fleet_carrier_manager.get_carrier(callsign)
+            
+            # If no carrier selected, try to get the first/primary carrier
+            if not carrier:
+                carriers = self.get_all_fleet_carriers()
+                if carriers:
+                    sorted_carriers = sorted(
+                        carriers,
+                        key=lambda x: x.get('last_updated', ''),
+                        reverse=True
+                    )
+                    carrier = sorted_carriers[0]
+                    callsign = carrier.get('callsign', '')
+            
+            if not carrier or not callsign:
+                # No carrier available, uncheck both
+                self.fleet_carrier_icy_rings_var.set(False)
+                self.fleet_carrier_pristine_var.set(False)
+                return
+            
+            carrier_system = carrier.get('current_system', '').strip()
+            if not carrier_system:
+                # No system available, uncheck both
+                self.fleet_carrier_icy_rings_var.set(False)
+                self.fleet_carrier_pristine_var.set(False)
+                return
+            
+            # First, check if we have stored data in CSV
+            icy_rings_stored = carrier.get('icy_rings', '').strip()
+            pristine_stored = carrier.get('pristine', '').strip()
+            
+            has_icy_rings = False
+            has_pristine = False
+            need_api_query = False
+            
+            # Check if we have valid stored data
+            if icy_rings_stored.lower() in ['yes', 'no'] and pristine_stored.lower() in ['yes', 'no']:
+                # We have stored data, use it
+                has_icy_rings = (icy_rings_stored.lower() == 'yes')
+                has_pristine = (pristine_stored.lower() == 'yes')
+            else:
+                # No stored data, need to query API
+                need_api_query = True
+                logger.info(f"No stored rings status for carrier {callsign} in system {carrier_system}, querying API")
+            
+            # Query EDSM API only if data is missing
+            if need_api_query:
+                try:
+                    encoded_system = urllib.parse.quote(carrier_system)
+                    url = f"https://www.edsm.net/api-system-v1/bodies?systemName={encoded_system}"
+                    
+                    response = requests.get(url, timeout=5, headers={'User-Agent': 'EDMC_SpanshRouter'})
+                    
+                    if response.status_code == 200:
+                        system_data = response.json()
+                        
+                        # Check if system data has bodies
+                        if 'bodies' in system_data and isinstance(system_data['bodies'], list):
+                            for body in system_data['bodies']:
+                                # Check if body has rings
+                                if 'rings' in body and isinstance(body['rings'], list):
+                                    for ring in body['rings']:
+                                        ring_type = ring.get('type', '').strip()
+                                        reserve_level = ring.get('reserveLevel', '').strip()
+                                        
+                                        # Check for Icy type (any reserve level)
+                                        if ring_type.lower() == 'icy':
+                                            has_icy_rings = True
+                                            
+                                            # Check for Pristine reserve level (only for Icy rings)
+                                            if reserve_level.lower() == 'pristine':
+                                                has_pristine = True
+                                                # Found both Icy and Pristine, can stop here
+                                                break
+                                    
+                                    # If we found both, no need to check more bodies
+                                    if has_icy_rings and has_pristine:
+                                        break
+                        
+                        # Store the results back to CSV via FleetCarrierManager
+                        if self.fleet_carrier_manager:
+                            self.fleet_carrier_manager.update_rings_status(callsign, has_icy_rings, has_pristine)
+                    
+                except requests.RequestException as e:
+                    logger.warning(f'!! Error querying EDSM API for system bodies: {e}')
+                    # On error, uncheck both but don't save to CSV
+                    has_icy_rings = False
+                    has_pristine = False
+                except Exception as e:
+                    logger.warning('!! Error checking fleet carrier rings status: ' + traceback.format_exc(), exc_info=False)
+                    # On error, uncheck both but don't save to CSV
+                    has_icy_rings = False
+                    has_pristine = False
+            
+            # Update checkboxes (from CSV data or API query result)
+            self.fleet_carrier_icy_rings_var.set(has_icy_rings)
+            self.fleet_carrier_pristine_var.set(has_pristine)
+                
+        except Exception:
+            logger.warning('!! Error updating fleet carrier rings status: ' + traceback.format_exc(), exc_info=False)
+            # On error, uncheck both
+            self.fleet_carrier_icy_rings_var.set(False)
+            self.fleet_carrier_pristine_var.set(False)
+    
+    def update_fleet_carrier_tritium_display(self):
+        """
+        Update the fleet carrier Tritium display (fuel and cargo) under the system display.
+        """
+        if not self.fleet_carrier_tritium_label:
+            return
+        
+        try:
+            # Get the currently selected carrier's Tritium info
+            carrier = None
+            if self.selected_carrier_callsign and self.fleet_carrier_manager:
+                carrier = self.fleet_carrier_manager.get_carrier(self.selected_carrier_callsign)
+            
+            # If no carrier selected, try to get the first/primary carrier
+            if not carrier:
+                carriers = self.get_all_fleet_carriers()
+                if carriers:
+                    # Get the most recently updated carrier
+                    sorted_carriers = sorted(
+                        carriers,
+                        key=lambda x: x.get('last_updated', ''),
+                        reverse=True
+                    )
+                    carrier = sorted_carriers[0]
+            
+            if carrier:
+                fuel = carrier.get('fuel', '0')
+                tritium_cargo = carrier.get('tritium_in_cargo', '0')
+                
+                # Format the display (keep blue for clickability)
+                if tritium_cargo and tritium_cargo != '0':
+                    display_text = f"Tritium: {fuel} (In Cargo: {tritium_cargo})"
+                else:
+                    display_text = f"Tritium: {fuel}"
+                
+                self.fleet_carrier_tritium_label.config(text=display_text, foreground="blue")
+            else:
+                self.fleet_carrier_tritium_label.config(text="Tritium: Unknown", foreground="gray")
+        except Exception:
+            logger.warning('!! Error updating fleet carrier Tritium display: ' + traceback.format_exc(), exc_info=False)
+            self.fleet_carrier_tritium_label.config(text="Tritium: Error", foreground="red")
+    
+    def update_fleet_carrier_balance_display(self):
+        """
+        Update the fleet carrier credit balance display below the Tritium display.
+        """
+        if not self.fleet_carrier_balance_label:
+            return
+        
+        try:
+            # Get the currently selected carrier's balance info
+            carrier = None
+            if self.selected_carrier_callsign and self.fleet_carrier_manager:
+                carrier = self.fleet_carrier_manager.get_carrier(self.selected_carrier_callsign)
+            
+            # If no carrier selected, try to get the first/primary carrier
+            if not carrier:
+                carriers = self.get_all_fleet_carriers()
+                if carriers:
+                    # Get the most recently updated carrier
+                    sorted_carriers = sorted(
+                        carriers,
+                        key=lambda x: x.get('last_updated', ''),
+                        reverse=True
+                    )
+                    carrier = sorted_carriers[0]
+            
+            if carrier:
+                balance = carrier.get('balance', '0')
+                
+                # Format balance with commas
+                try:
+                    balance_formatted = f"{int(balance):,}" if balance else "0"
+                    display_text = f"Balance: {balance_formatted} cr"
+                except (ValueError, TypeError):
+                    display_text = f"Balance: {balance} cr"
+                
+                self.fleet_carrier_balance_label.config(text=display_text, foreground="")
+            else:
+                self.fleet_carrier_balance_label.config(text="Balance: Unknown", foreground="gray")
+        except Exception:
+            logger.warning('!! Error updating fleet carrier balance display: ' + traceback.format_exc(), exc_info=False)
+            self.fleet_carrier_balance_label.config(text="Balance: Error", foreground="red")
+    
+    def show_route_window(self):
+        """
+        Open a window displaying the current route as an easy-to-read list.
+        System names are hyperlinked to Inara.cz.
+        Shows all columns based on route type with checkboxes for yes/no fields.
+        """
+        try:
+            if not self.route or len(self.route) == 0:
+                confirmDialog.showinfo("View Route", "No route is currently loaded.")
+                return
+            
+            # Read the saved CSV file to get all column data
+            route_data = []
+            fieldnames = []
+            fieldname_map = {}
+            
+            if os.path.exists(self.save_route_path):
+                try:
+                    with open(self.save_route_path, 'r', encoding='utf-8-sig', newline='') as csvfile:
+                        reader = csv.DictReader(csvfile)
+                        fieldnames = reader.fieldnames if reader.fieldnames else []
+                        
+                        # Create case-insensitive fieldname mapping
+                        fieldname_map = {name.lower(): name for name in fieldnames}
+                        
+                        def get_field(row, field_name, default=""):
+                            """Get field value from row using case-insensitive lookup"""
+                            key = fieldname_map.get(field_name.lower(), field_name)
+                            return row.get(key, default)
+                        
+                        # Read all rows and store all fields
+                        for row in reader:
+                            route_entry = {}
+                            for field_name in fieldnames:
+                                route_entry[field_name.lower()] = get_field(row, field_name, '')
+                            route_data.append(route_entry)
+                except Exception:
+                    logger.warning('!! Error reading route CSV for display: ' + traceback.format_exc(), exc_info=False)
+                    confirmDialog.showerror("Error", "Failed to read route CSV file.")
+                    return
+            else:
+                # Fallback: create route data from in-memory route structure
+                # This is less ideal but better than nothing
+                confirmDialog.showwarning("Route File Not Found", "Route CSV file not found. Please import the route again.")
+                return
+            
+            if not route_data:
+                confirmDialog.showinfo("View Route", "No route data to display.")
+                return
+            
+            # Detect route type from CSV columns if not already set
+            # Check for Road to Riches by looking for Body Name column
+            if not self.roadtoriches and 'body name' in fieldname_map:
+                self.roadtoriches = True
+            
+            # Define columns to exclude based on route type
+            exclude_columns = set()
+            checkbox_columns = set()
+            
+            # Fleet Carrier routes: exclude Tritium in tank and Tritium in market
+            if self.fleetcarrier:
+                exclude_columns.add('tritium in tank')
+                exclude_columns.add('tritium in market')
+                # Checkbox columns for fleet carrier
+                if 'icy ring' in fieldname_map:
+                    checkbox_columns.add('icy ring')
+                if 'pristine' in fieldname_map:
+                    checkbox_columns.add('pristine')
+                if 'restock tritium' in fieldname_map:
+                    checkbox_columns.add('restock tritium')
+            
+            # Galaxy routes: Refuel and Neutron Star are checkboxes
+            if self.galaxy:
+                if 'refuel' in fieldname_map:
+                    checkbox_columns.add('refuel')
+                if 'neutron star' in fieldname_map:
+                    checkbox_columns.add('neutron star')
+            
+            # Road to Riches: Is Terraformable is checkbox
+            if self.roadtoriches:
+                if 'is terraformable' in fieldname_map:
+                    checkbox_columns.add('is terraformable')
+            
+            # Neutron routes: Neutron Star is checkbox (if not galaxy and has Neutron Star column)
+            if not self.fleetcarrier and not self.galaxy and not self.roadtoriches:
+                # Check if this might be a neutron route (has Neutron Star column)
+                if 'neutron star' in fieldname_map:
+                    checkbox_columns.add('neutron star')
+            
+            # Build list of columns to display
+            display_columns = []
+            for field in fieldnames:
+                field_lower = field.lower()
+                # Always exclude excluded columns
+                if field_lower in exclude_columns:
+                    continue
+                display_columns.append(field)
+            
+            # For Road to Riches, track previous system name to avoid repetition
+            prev_system_name = None
+            
+            # Create new window
+            route_window = tk.Toplevel(self.parent)
+            route_window.title("Route View")
+            
+            # Create main container with horizontal and vertical scrolling
+            main_frame = tk.Frame(route_window, bg="white")
+            main_frame.pack(fill=tk.BOTH, expand=True)
+            
+            # Create horizontal scrollbar
+            h_scrollbar = ttk.Scrollbar(main_frame, orient=tk.HORIZONTAL)
+            h_scrollbar.pack(side=tk.BOTTOM, fill=tk.X)
+            
+            # Create vertical scrollbar
+            v_scrollbar = ttk.Scrollbar(main_frame, orient=tk.VERTICAL)
+            v_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+            
+            # Create canvas with both scrollbars
+            canvas = tk.Canvas(main_frame, bg="white",
+                             xscrollcommand=h_scrollbar.set,
+                             yscrollcommand=v_scrollbar.set)
+            canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+            
+            h_scrollbar.config(command=canvas.xview)
+            v_scrollbar.config(command=canvas.yview)
+            
+            scrollable_frame = tk.Frame(canvas, bg="white")
+            
+            canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
+            
+            # Update canvas scroll region when frame size changes
+            def on_frame_configure(event):
+                canvas.configure(scrollregion=canvas.bbox("all"))
+                # Update canvas window width to match canvas width for proper horizontal scrolling
+                canvas_width = canvas.winfo_width()
+                if canvas_width > 1:  # Only update if canvas has been rendered
+                    canvas_window_id = canvas.find_all()
+                    if canvas_window_id:
+                        canvas.itemconfig(canvas_window_id[0], width=canvas_width)
+            
+            scrollable_frame.bind("<Configure>", on_frame_configure)
+            
+            # Also bind to canvas resize
+            def on_canvas_configure(event):
+                canvas_width = event.width
+                canvas_window_id = canvas.find_all()
+                if canvas_window_id:
+                    canvas.itemconfig(canvas_window_id[0], width=canvas_width)
+            
+            canvas.bind('<Configure>', on_canvas_configure)
+            
+            # Header
+            header_frame = tk.Frame(scrollable_frame, bg="lightgray", relief=tk.RAISED, borderwidth=1)
+            header_frame.pack(fill=tk.X, padx=5, pady=5)
+            
+            # Add step number as first column
+            headers = ["#"] + display_columns
+            column_widths = [4] + [max(15, len(h)) for h in display_columns]
+            
+            # Calculate required width based on columns (after column_widths is defined)
+            # Estimate width: column_widths * 10 (approximate pixels per character) + padding
+            total_column_width = sum(column_widths) * 10 + 150  # Add padding for buttons/scrollbars
+            screen_width = route_window.winfo_screenwidth()
+            window_width = min(total_column_width, screen_width - 50)  # Leave 50px margin from screen edges
+            
+            for i, header in enumerate(headers):
+                width = column_widths[i] if i < len(column_widths) else 20
+                # Cap width at reasonable maximum
+                width = min(width, 30) if i > 0 else width
+                label = tk.Label(header_frame, text=header, font=("Arial", 9, "bold"), bg="lightgray", width=width)
+                label.grid(row=0, column=i, padx=2, pady=5, sticky=tk.W)
+            
+            # Route rows
+            for idx, route_entry in enumerate(route_data):
+                row_frame = tk.Frame(scrollable_frame, relief=tk.RIDGE, borderwidth=1)
+                row_frame.pack(fill=tk.X, padx=5, pady=2)
+                
+                col_idx = 0
+                
+                # Step number
+                tk.Label(row_frame, text=str(idx + 1), width=4, anchor="w").grid(row=0, column=col_idx, padx=2, pady=5, sticky=tk.W)
+                col_idx += 1
+                
+                # Display each column
+                for field_name in display_columns:
+                    field_lower = field_name.lower()
+                    value = route_entry.get(field_lower, '').strip() if isinstance(route_entry.get(field_lower, ''), str) else str(route_entry.get(field_lower, ''))
+                    
+                    # Special handling for System Name
+                    if field_lower == self.system_header.lower():
+                        # For Road to Riches, check if system name repeats
+                        if self.roadtoriches:
+                            current_system = value
+                            if current_system and current_system.lower() == prev_system_name:
+                                # System name repeats, show empty
+                                system_label = tk.Label(row_frame, text="", width=30, anchor="w")
+                                system_label.grid(row=0, column=col_idx, padx=2, pady=5, sticky=tk.W)
+                            else:
+                                # New system name, display it
+                                if current_system:
+                                    system_label = tk.Label(row_frame, text=current_system, fg="blue", cursor="hand2", width=30, anchor="w")
+                                    system_label.grid(row=0, column=col_idx, padx=2, pady=5, sticky=tk.W)
+                                    system_label.bind("<Button-1>", lambda e, s=current_system: self.open_inara_system(s))
+                                    system_label.bind("<Enter>", lambda e, lbl=system_label: lbl.config(fg="darkblue", underline=True))
+                                    system_label.bind("<Leave>", lambda e, lbl=system_label: lbl.config(fg="blue", underline=False))
+                                else:
+                                    tk.Label(row_frame, text="", width=30, anchor="w").grid(row=0, column=col_idx, padx=2, pady=5, sticky=tk.W)
+                            prev_system_name = current_system.lower() if current_system else None
+                        else:
+                            # Normal system name display (clickable to Inara)
+                            if value:
+                                system_label = tk.Label(row_frame, text=value, fg="blue", cursor="hand2", width=30, anchor="w")
+                                system_label.grid(row=0, column=col_idx, padx=2, pady=5, sticky=tk.W)
+                                system_label.bind("<Button-1>", lambda e, s=value: self.open_inara_system(s))
+                                system_label.bind("<Enter>", lambda e, lbl=system_label: lbl.config(fg="darkblue", underline=True))
+                                system_label.bind("<Leave>", lambda e, lbl=system_label: lbl.config(fg="blue", underline=False))
+                            else:
+                                tk.Label(row_frame, text="", width=30, anchor="w").grid(row=0, column=col_idx, padx=2, pady=5, sticky=tk.W)
+                    
+                    # Checkbox columns (yes/no fields)
+                    elif field_lower in checkbox_columns:
+                        checkbox_value = value.lower()
+                        checkbox_var = tk.BooleanVar(value=(checkbox_value == 'yes'))
+                        checkbox_text = field_name  # Use original field name for display
+                        checkbox_cb = tk.Checkbutton(row_frame, variable=checkbox_var, state=tk.DISABLED, text=checkbox_text, width=15, anchor="w")
+                        checkbox_cb.grid(row=0, column=col_idx, padx=2, pady=5, sticky=tk.W)
+                    
+                    # Regular text columns
+                    else:
+                        width = min(max(15, len(field_name)), 25)
+                        tk.Label(row_frame, text=value if value else "", width=width, anchor="w").grid(row=0, column=col_idx, padx=2, pady=5, sticky=tk.W)
+                    
+                    col_idx += 1
+            
+            # Finalize window setup after all widgets are created
+            canvas.update_idletasks()
+            canvas.configure(scrollregion=canvas.bbox("all"))
+            
+            # Set window size
+            route_window.geometry(f"{window_width}x700")
+            route_window.minsize(400, 400)  # Minimum size
+            
+            # Close button (outside scrollable area)
+            close_btn_frame = tk.Frame(route_window, bg="white")
+            close_btn_frame.pack(pady=5)
+            close_btn = tk.Button(close_btn_frame, text="Close", command=route_window.destroy)
+            close_btn.pack()
+            
+        except Exception:
+            logger.warning('!! Error showing route window: ' + traceback.format_exc(), exc_info=False)
+            confirmDialog.showerror("Error", "Failed to display route.")
+    
+    def update_fleet_carrier_status(self):
+        """
+        Update the fleet carrier status display (legacy method, now uses dropdown).
+        """
+        self.update_fleet_carrier_dropdown()
+        self.update_fleet_carrier_system_display()
+        self.update_fleet_carrier_rings_status()
+        self.update_fleet_carrier_tritium_display()
+        self.update_fleet_carrier_balance_display()

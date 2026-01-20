@@ -2,6 +2,87 @@
 
 All notable changes to this project will be documented in this file.
 
+## 3.3.0
+
+### Major Features
+
+- **Fleet Carrier CAPI Integration**: Comprehensive fleet carrier management using Frontier's Companion API
+  - Automatic tracking of all fleet carriers via CAPI data
+  - Stores carrier data in `fleet_carriers.csv` for persistence and backup
+  - Tracks location, fuel (Tritium), balance, cargo, state, theme, docking access, and more
+  - Supports multiple carriers and tracks source galaxy (Live/Beta/Legacy)
+  - Real-time updates from CAPI and journal event fallback for location, fuel, and cargo changes
+
+- **Fleet Carrier Management UI**: Complete fleet carrier management interface at the top of the plugin window
+  - **Dropdown Menu**: Select and track specific fleet carriers with name, callsign, system, and Tritium displayed
+  - **View All Window**: Comprehensive window showing all carriers with full details
+    - Select button to set active carrier from the list
+    - Hyperlinked carrier names/callsigns and system names to Inara.cz
+    - Displays Tritium (fuel/cargo), Balance, Cargo, State, Theme, Icy Rings, Pristine, Docking Access, Notorious Access
+    - Auto-sizing and scrollbars for optimal display
+  - **Inara Button**: Quick access to Inara.cz page for selected carrier
+  - **System Display**: Shows current location of selected fleet carrier
+  - **Balance Display**: Shows carrier credit balance with comma formatting
+  - **Icy Rings & Pristine Status**: Read-only checkboxes showing ring information for carrier's current system
+    - Data fetched from EDSM API and cached in CSV to minimize API calls
+    - Updates automatically when carrier location changes
+
+- **Fleet Carrier Route Integration**: Enhanced route features for fleet carrier routes
+  - **Tritium Display**: Shows fuel and cargo amounts (e.g., "Tritium: 1000 (In Cargo: 500)")
+    - Clickable label to search Inara.cz for nearby Tritium using current system location
+  - **Restock Tritium Warning**: Displays warning when carrier is in a route system requiring Tritium restock
+  - **Find Trit Button**: Quick search for Tritium sources near carrier location via Inara.cz
+  - Route resumption uses carrier location instead of player location for fleet carrier routes
+
+### Route Management Enhancements
+
+- **View Route Window**: New window displaying entire route as formatted list
+  - System names hyperlinked to Inara.cz
+  - Auto-detects route type (Fleet Carrier, Galaxy, Road to Riches, Neutron)
+  - Displays appropriate columns based on route type
+  - Yes/No fields shown as read-only checkboxes (Restock Tritium, Icy Ring, Pristine, Refuel, Neutron Star, Is Terraformable)
+  - Auto-sizing to fit content with screen width constraints
+  - Horizontal and vertical scrollbars when needed
+  - Road to Riches routes: System name repetition handled for better readability
+
+- **Intelligent Route Resumption**: Automatically resumes route from current location when reloading CSV
+  - For regular routes: Uses player's current system location
+  - For fleet carrier routes: Uses selected fleet carrier's current location
+  - Searches entire route to find matching system and sets appropriate next waypoint
+  - Properly adjusts jump counts when resuming mid-route
+
+- **Fuel Used Display**: Shows "Fuel Used" value in waypoint details area when route CSV includes this column
+  - Supports Fleet Carrier, Galaxy, and generic route formats
+
+### UI/UX Improvements
+
+- **Plugin Display Priority**: Configured as Package Plugin to appear at top of EDMC plugin section
+- **Hyperlinked Elements**: Carrier names, system names, and other elements link to Inara.cz for quick access
+- **Enhanced Window Management**: All popup windows (View Route, View All Carriers) feature proper auto-sizing and scrolling
+- **Improved Data Presentation**: Better formatting for numbers, checkboxes for boolean values, and organized column layouts
+
+### Technical Improvements
+
+- **EDSM API Integration**: Queries EDSM API for system body/ring information
+  - Determines Icy Rings and Pristine status for fleet carrier locations
+  - Caches results in CSV to minimize API calls
+  - Only queries when carrier location changes or data is missing
+
+- **Journal Event Handling**: Enhanced journal event processing for fleet carrier updates
+  - Handles `CarrierJump`, `CarrierDepositFuel`, `CarrierStats`, `Cargo`, and `Location` events
+  - Fallback mechanism when CAPI data is unavailable
+  - Real-time updates for fuel, cargo, and location changes
+
+- **CSV Data Management**: Extended fleet carrier CSV to include Icy Rings and Pristine status
+  - Preserves cached data when updating from CAPI
+  - Invalidates cached ring data when carrier location changes
+
+### Requirements
+
+- **CAPI (Companion API)**: Required for fleet carrier features
+- **EDSM API**: Required for Icy Rings and Pristine status display
+- **INARA API**: Optional but recommended for enhanced integration
+
 ## 3.2.0
 
 - **Python 3.13 Compatibility**: Updated codebase for full Python 3.13 compatibility
