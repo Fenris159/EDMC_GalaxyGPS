@@ -97,7 +97,60 @@ class SpanshRouter():
     def init_gui(self, parent):
         self.parent = parent
         
-        # FIRST: Check if widgets already exist and are valid - if so, don't recreate them
+        # FIRST: Check if there are any existing frames in parent that look like ours
+        # This handles the case where plugin_app() is called multiple times
+        try:
+            existing_frames = []
+            for widget in parent.winfo_children():
+                if isinstance(widget, tk.Frame):
+                    # Check if this frame has our signature widgets (fleet carrier widgets)
+                    try:
+                        children = widget.winfo_children()
+                        # Look for fleet carrier status label as signature
+                        for child in children:
+                            if isinstance(child, tk.Label):
+                                try:
+                                    text = child.cget('text')
+                                    if text and 'Fleet Carrier' in text:
+                                        # This looks like our frame
+                                        existing_frames.append(widget)
+                                        break
+                                except Exception:
+                                    pass
+                    except Exception:
+                        pass
+            
+            # If we found existing frames, destroy them to prevent duplicates
+            for frame in existing_frames:
+                try:
+                    # Don't destroy if it's our tracked frame and it's still valid
+                    if hasattr(self, 'frame') and frame == self.frame:
+                        try:
+                            if self.frame.winfo_exists():
+                                # Our frame exists and is valid, check widgets
+                                if (hasattr(self, 'fleet_carrier_status_label') and 
+                                    self.fleet_carrier_status_label):
+                                    try:
+                                        if self.fleet_carrier_status_label.winfo_exists():
+                                            # Widgets exist and are valid, reuse this frame
+                                            return self.frame
+                                    except (tk.TclError, AttributeError):
+                                        pass
+                        except (tk.TclError, AttributeError):
+                            pass
+                    # Destroy duplicate frames
+                    for child in frame.winfo_children():
+                        try:
+                            child.destroy()
+                        except Exception:
+                            pass
+                    frame.destroy()
+                except Exception:
+                    pass
+        except Exception:
+            pass
+        
+        # Check if our tracked frame exists and is valid
         widgets_exist = False
         if hasattr(self, 'frame') and self.frame:
             try:
@@ -158,6 +211,23 @@ class SpanshRouter():
         # Create frame fresh
         self.frame = tk.Frame(parent, borderwidth=2)
         self.frame.grid(sticky=tk.NSEW, columnspan=2)
+        
+        # Double-check: Before creating widgets, verify they don't already exist in the frame
+        # This prevents duplicates if init_gui() is called multiple times
+        try:
+            existing_widgets = self.frame.winfo_children()
+            for widget in existing_widgets:
+                if isinstance(widget, tk.Label):
+                    try:
+                        text = widget.cget('text')
+                        if text and 'Fleet Carrier' in text:
+                            # Fleet carrier widgets already exist in this frame - don't recreate
+                            logger.warning("Fleet carrier widgets already exist in frame, skipping creation")
+                            return self.frame
+                    except Exception:
+                        pass
+        except Exception:
+            pass
         
         # Fleet carrier status display (compact, at top)
         # Create all widgets fresh
@@ -417,8 +487,11 @@ class SpanshRouter():
         # Show widgets based on state
         if state == 'plotting':
             # Show plotting interface
+            # IMPORTANT: Only call grid() on widgets that were grid_remove()d
+            # Never call grid() on fleet carrier widgets - they're always visible
             for widget in plotting_widgets:
-                widget.grid()
+                if widget not in always_visible:
+                    widget.grid()
             # Prefill source if needed
             if not self.source_ac.var.get() or self.source_ac.var.get() == self.source_ac.placeholder:
                 current_system = monitor.state.get('SystemName')
@@ -428,8 +501,11 @@ class SpanshRouter():
                     self.source_ac.put_placeholder()
         elif state == 'route' and len(self.route) > 0:
             # Show route navigation interface
+            # IMPORTANT: Only call grid() on widgets that were grid_remove()d
+            # Never call grid() on fleet carrier widgets - they're always visible
             for widget in route_widgets:
-                widget.grid()
+                if widget not in always_visible:
+                    widget.grid()
             
             # Update waypoint button text
             self.waypoint_btn["text"] = self.next_wp_label + '\n' + self.next_stop
