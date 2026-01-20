@@ -341,10 +341,12 @@ class SpanshRouter():
         row += 1
         self.efficiency_slider.grid(row=row, pady=10, columnspan=2, sticky=tk.EW)
         row += 1
-        self.csv_route_btn.grid(row=row, pady=10, padx=0)
-        self.plot_route_btn.grid(row=row, pady=10, padx=0)
-        self.view_route_btn.grid(row=row, pady=10, padx=0)
-        self.plot_gui_btn.grid(row=row, column=1, pady=10, padx=5, sticky=tk.W)
+        # Basic controls - always visible, positioned in sequential columns
+        self.csv_route_btn.grid(row=row, column=0, pady=10, padx=0)
+        self.view_route_btn.grid(row=row, column=1, pady=10, padx=0)
+        self.plot_gui_btn.grid(row=row, column=2, pady=10, padx=0)
+        # Plotting controls - shown/hidden based on state
+        self.plot_route_btn.grid(row=row, column=0, pady=10, padx=0)
         self.cancel_plot.grid(row=row, column=1, pady=10, padx=5, sticky=tk.E)
         row += 1
         self.export_route_btn.grid(row=row, pady=10, padx=0)
@@ -518,12 +520,18 @@ class SpanshRouter():
                 self.refuel_lbl['text'] = self.refuellbl_txt
                 self.refuel_lbl.grid()
         
-        # Always show basic controls when not plotting
-        # These widgets are already positioned in init_gui() with specific row/column values
-        # Calling grid() without parameters can cause Tkinter to reposition widgets
-        # Since these widgets should always be visible, we don't need to re-grid them
-        # They're only in basic_controls so they don't get grid_remove() called on them
-        # So we don't need to do anything here - they're already visible
+        # Always ensure basic controls are visible
+        # These widgets should always be visible regardless of state
+        # They're positioned in init_gui() and should never be grid_remove()d
+        # Explicitly ensure they're shown (in case they were accidentally hidden)
+        for widget in basic_controls:
+            if widget:
+                try:
+                    # Ensure widget is visible - grid() will restore it if it was grid_remove()d
+                    # Tkinter remembers the original grid position when grid_remove() is called
+                    widget.grid()
+                except Exception:
+                    pass
 
     def update_gui(self):
         """Update the GUI based on current state"""
