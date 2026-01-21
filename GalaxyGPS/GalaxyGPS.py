@@ -18,7 +18,7 @@ from time import sleep
 from tkinter import *
 
 import requests  # type: ignore
-from config import appname  # type: ignore
+from config import appname, config  # type: ignore
 from monitor import monitor  # type: ignore
 from theme import theme  # type: ignore
 
@@ -82,6 +82,74 @@ class GalaxyGPS():
             except json.JSONDecodeError:
                 # Fallback: if it's not valid JSON, treat as plain text (remove quotes if present)
                 self.plugin_version = version_content.strip('"\'')
+    
+    def get_current_theme(self):
+        """
+        Detect the current EDMC theme setting.
+        
+        Returns:
+            str: 'normal', 'dark', or 'transparent'
+        """
+        try:
+            theme_int = config.get_int('theme')
+            # Theme values: 0 = normal, 1 = dark, 2 = transparent
+            if theme_int == 0:
+                return 'normal'
+            elif theme_int == 1:
+                return 'dark'
+            elif theme_int == 2:
+                return 'transparent'
+            else:
+                # Default to normal if unknown value
+                return 'normal'
+        except:
+            # Default to normal if config is unavailable
+            return 'normal'
+    
+    def get_theme_color(self, color_name):
+        """
+        Get a theme-aware color value based on the current EDMC theme.
+        
+        Args:
+            color_name (str): Name of the color to retrieve. Options:
+                - 'primary': Main UI accent color (orange for dark/transparent, darker for normal)
+                - 'secondary': Secondary text/label color (gray)
+                - 'link': Link color (blue)
+                - 'warning': Warning/error color (red)
+                - 'highlight': Row highlight color (yellow for dark, light yellow for normal)
+        
+        Returns:
+            str: Color value (hex code or color name) appropriate for current theme
+        """
+        current_theme = self.get_current_theme()
+        
+        color_map = {
+            'normal': {
+                'primary': '#d97706',  # Darker orange/brown for normal theme
+                'secondary': '#6b7280',  # Medium gray
+                'link': '#2563eb',  # Standard blue
+                'warning': '#dc2626',  # Red
+                'highlight': '#fef3c7'  # Light yellow background
+            },
+            'dark': {
+                'primary': 'orange',  # Orange for dark theme
+                'secondary': 'gray',  # Gray
+                'link': '#60a5fa',  # Light blue for dark theme
+                'warning': '#ef4444',  # Bright red
+                'highlight': '#78350f'  # Dark yellow/orange for dark theme
+            },
+            'transparent': {
+                'primary': 'orange',  # Orange for transparent theme
+                'secondary': 'gray',  # Gray
+                'link': '#60a5fa',  # Light blue for transparent theme
+                'warning': '#ef4444',  # Bright red
+                'highlight': '#78350f'  # Dark yellow/orange for transparent theme
+            }
+        }
+        
+        # Default to dark theme colors if theme not found
+        theme_colors = color_map.get(current_theme, color_map['dark'])
+        return theme_colors.get(color_name, 'gray')  # Default to gray if color not found
 
         self.update_available = False
         # Initialize Fleet Carrier Manager for CAPI integration
@@ -255,28 +323,30 @@ class GalaxyGPS():
                 bg_color = '#1e1e1e'  # Dark gray/black typical of EDMC dark theme
             
             # Create and configure style for the combobox
+            # Use theme-aware colors
+            primary_color = self.get_theme_color('primary')
             combobox_style = ttk.Style()
-            # Configure the Combobox style to match EDMC dark theme with orange text
+            # Configure the Combobox style to match EDMC theme with theme-aware colors
             combobox_style.configure(
                 'FleetCarrier.TCombobox',
-                fieldbackground=bg_color,  # Match EDMC dark theme background
+                fieldbackground=bg_color,  # Match EDMC theme background
                 background=bg_color,  # Background of the combobox
-                foreground='orange',  # Orange text to match rest of program
+                foreground=primary_color,  # Theme-aware primary color
                 borderwidth=1,
                 relief='solid',
-                arrowcolor='orange',  # Orange dropdown arrow
+                arrowcolor=primary_color,  # Theme-aware dropdown arrow
                 selectbackground=bg_color,  # Background when item is selected
-                selectforeground='orange'  # Text color when item is selected
+                selectforeground=primary_color  # Theme-aware text color when item is selected
             )
             # Configure the dropdown arrow button and readonly state
             combobox_style.map(
                 'FleetCarrier.TCombobox',
                 fieldbackground=[('readonly', bg_color), ('!readonly', bg_color)],
                 background=[('readonly', bg_color), ('!readonly', bg_color)],
-                foreground=[('readonly', 'orange'), ('!readonly', 'orange')],
-                arrowcolor=[('readonly', 'orange'), ('!readonly', 'orange')],
+                foreground=[('readonly', primary_color), ('!readonly', primary_color)],
+                arrowcolor=[('readonly', primary_color), ('!readonly', primary_color)],
                 selectbackground=[('readonly', bg_color), ('!readonly', bg_color)],
-                selectforeground=[('readonly', 'orange'), ('!readonly', 'orange')]
+                selectforeground=[('readonly', primary_color), ('!readonly', primary_color)]
             )
             
             self.fleet_carrier_combobox = ttk.Combobox(
@@ -320,7 +390,9 @@ class GalaxyGPS():
                 cursor="hand2",
                 state=tk.DISABLED
             )
-            self.fleet_carrier_system_label = tk.Label(self.frame, text="System:", foreground="gray")
+            # Use theme-aware secondary color for labels
+            secondary_color = self.get_theme_color('secondary')
+            self.fleet_carrier_system_label = tk.Label(self.frame, text="System:", foreground=secondary_color)
             # Icy Rings and Pristine status - circular toggle buttons (radio-button style)
             # Create a container frame to hold both toggles side-by-side
             frame_bg = self.frame.cget('bg')
@@ -342,7 +414,7 @@ class GalaxyGPS():
             self.fleet_carrier_icy_rings_label = tk.Label(
                 icy_rings_frame,
                 text="Icy Rings",
-                foreground="gray",
+                foreground=self.get_theme_color('secondary'),
                 bg=frame_bg
             )
             self.fleet_carrier_icy_rings_label.pack(side=tk.LEFT)
@@ -363,7 +435,7 @@ class GalaxyGPS():
             self.fleet_carrier_pristine_label = tk.Label(
                 pristine_frame,
                 text="Pristine",
-                foreground="gray",
+                foreground=self.get_theme_color('secondary'),
                 bg=frame_bg
             )
             self.fleet_carrier_pristine_label.pack(side=tk.LEFT)
@@ -379,7 +451,7 @@ class GalaxyGPS():
                 foreground="blue", 
                 cursor="hand2"
             )
-            self.fleet_carrier_balance_label = tk.Label(self.frame, text="Balance:", foreground="gray")
+            self.fleet_carrier_balance_label = tk.Label(self.frame, text="Balance:", foreground=self.get_theme_color('secondary'))
 
             # Route info - make waypoint button more compact
             self.waypoint_prev_btn = tk.Button(self.frame, text="^", command=self.goto_prev_waypoint, width=3)
@@ -422,7 +494,7 @@ class GalaxyGPS():
             self.supercharge_label = tk.Label(
                 supercharge_frame,
                 text="Supercharge",
-                foreground="orange",
+                foreground=self.get_theme_color('primary'),
                 bg=frame_bg,
                 cursor="hand2"
             )
@@ -586,19 +658,21 @@ class GalaxyGPS():
                 bg_color = "white"
             
             # Draw outer circle (always visible) - larger size (20x20 circle in 24x24 canvas)
+            # Use theme-aware primary color
+            primary_color = self.get_theme_color('primary')
             self.supercharge_toggle_canvas.create_oval(
                 2, 2, 22, 22,
-                outline="orange",
+                outline=primary_color,
                 width=2,
-                fill=bg_color if not is_checked else "orange"
+                fill=bg_color if not is_checked else primary_color
             )
             
-            # If checked, draw inner filled circle
+            # If checked, draw inner filled circle in primary color
             if is_checked:
                 self.supercharge_toggle_canvas.create_oval(
                     7, 7, 17, 17,
-                    outline="orange",
-                    fill="orange",
+                    outline=primary_color,
+                    fill=primary_color,
                     width=1
                 )
         except Exception:
@@ -639,27 +713,29 @@ class GalaxyGPS():
                 bg_color = "white"
             
             # Draw outer circle (always visible)
-            # Use orange outline when checked, gray when unchecked
-            outline_color = "orange" if is_checked else "gray"
+            # Use theme-aware primary color when checked, secondary when unchecked
+            primary_color = self.get_theme_color('primary')
+            secondary_color = self.get_theme_color('secondary')
+            outline_color = primary_color if is_checked else secondary_color
             self.fleet_carrier_icy_rings_canvas.create_oval(
                 2, 2, 18, 18,
                 outline=outline_color,
                 width=2,
-                fill=bg_color if not is_checked else "orange"
+                fill=bg_color if not is_checked else primary_color
             )
             
-            # If checked, draw inner filled circle in orange
+            # If checked, draw inner filled circle in primary color
             if is_checked:
                 self.fleet_carrier_icy_rings_canvas.create_oval(
                     6, 6, 14, 14,
-                    outline="darkorange",
-                    fill="orange",
+                    outline=primary_color,
+                    fill=primary_color,
                     width=1
                 )
             
-            # Update label color: orange when checked, gray when unchecked
+            # Update label color: primary when checked, secondary when unchecked
             if hasattr(self, 'fleet_carrier_icy_rings_label'):
-                label_color = "orange" if is_checked else "gray"
+                label_color = primary_color if is_checked else secondary_color
                 self.fleet_carrier_icy_rings_label.config(foreground=label_color)
         except Exception:
             pass
@@ -687,27 +763,29 @@ class GalaxyGPS():
                 bg_color = "white"
             
             # Draw outer circle (always visible)
-            # Use orange outline when checked, gray when unchecked
-            outline_color = "orange" if is_checked else "gray"
+            # Use theme-aware primary color when checked, secondary when unchecked
+            primary_color = self.get_theme_color('primary')
+            secondary_color = self.get_theme_color('secondary')
+            outline_color = primary_color if is_checked else secondary_color
             self.fleet_carrier_pristine_canvas.create_oval(
                 2, 2, 18, 18,
                 outline=outline_color,
                 width=2,
-                fill=bg_color if not is_checked else "orange"
+                fill=bg_color if not is_checked else primary_color
             )
             
-            # If checked, draw inner filled circle in orange
+            # If checked, draw inner filled circle in primary color
             if is_checked:
                 self.fleet_carrier_pristine_canvas.create_oval(
                     6, 6, 14, 14,
-                    outline="darkorange",
-                    fill="orange",
+                    outline=primary_color,
+                    fill=primary_color,
                     width=1
                 )
             
-            # Update label color: orange when checked, gray when unchecked
+            # Update label color: primary when checked, secondary when unchecked
             if hasattr(self, 'fleet_carrier_pristine_label'):
-                label_color = "orange" if is_checked else "gray"
+                label_color = primary_color if is_checked else secondary_color
                 self.fleet_carrier_pristine_label.config(foreground=label_color)
         except Exception:
             pass
