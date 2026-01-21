@@ -1,3 +1,4 @@
+
 import ast
 import csv
 import json
@@ -82,7 +83,7 @@ class GalaxyGPS():
             except json.JSONDecodeError:
                 # Fallback: if it's not valid JSON, treat as plain text (remove quotes if present)
                 self.plugin_version = version_content.strip('"\'')
-        
+
         self.update_available = False
         # Initialize Fleet Carrier Manager for CAPI integration
         self.fleet_carrier_manager = FleetCarrierManager(plugin_dir)
@@ -593,7 +594,7 @@ class GalaxyGPS():
                 fill=bg_color if not is_checked else "orange"
             )
             
-            # If checked, draw inner filled circle in orange
+            # If checked, draw inner filled circle
             if is_checked:
                 self.supercharge_toggle_canvas.create_oval(
                     7, 7, 17, 17,
