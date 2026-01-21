@@ -19,7 +19,7 @@ from time import sleep
 from tkinter import *
 
 import requests  # type: ignore
-from config import appname  # type: ignore
+from config import appname, config  # type: ignore
 from monitor import monitor  # type: ignore
 from theme import theme  # type: ignore
 
@@ -4115,11 +4115,30 @@ class GalaxyGPS():
                     # Empty string means let theme handle it completely
                     row_bg = base_bg if base_bg and base_bg.lower() not in ['white', '#ffffff', 'systemwindow'] else ""
                     if is_current_waypoint:
-                        # Keep highlight color for current waypoint even with theme
-                        row_bg = "#fff9c4"  # Light yellow highlight for current waypoint
+                        # Conditionally set highlight color based on theme
+                        # 0 = normal theme (use yellow), 1 = dark, 2 = transparent (use grey)
+                        try:
+                            current_theme = config.get_int('theme')
+                            if current_theme == 0:
+                                # Normal theme - use light yellow
+                                row_bg = "#fff9c4"
+                            else:
+                                # Dark or transparent theme - use grey
+                                row_bg = "#808080"  # Grey highlight for dark/transparent themes
+                        except:
+                            # Fallback to yellow if theme detection fails
+                            row_bg = "#fff9c4"
                 except:
                     if is_current_waypoint:
-                        row_bg = "#fff9c4"
+                        # Try to detect theme even in exception handler
+                        try:
+                            current_theme = config.get_int('theme')
+                            if current_theme == 0:
+                                row_bg = "#fff9c4"
+                            else:
+                                row_bg = "#808080"
+                        except:
+                            row_bg = "#fff9c4"
                     else:
                         row_bg = ""  # Empty string allows theme to handle it
                 
