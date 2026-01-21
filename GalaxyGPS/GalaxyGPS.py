@@ -2425,9 +2425,11 @@ class GalaxyGPS():
                             try:
                                 fg_color = child.cget('foreground')
                                 if not fg_color or fg_color.lower() in ['black', '#000000', 'systemwindowtext']:
-                                    child.config(foreground='orange')
+                                    # Let theme.handle foreground color automatically
+                                    pass
                             except:
-                                child.config(foreground='orange')
+                                # Let theme.handle foreground color automatically
+                                pass
                         # Also style any Frame containers
                         elif isinstance(child, tk.Frame):
                             theme.update(child)
@@ -2435,12 +2437,8 @@ class GalaxyGPS():
                             for nested in child.winfo_children():
                                 if isinstance(nested, tk.Listbox):
                                     theme.update(nested)
-                                    try:
-                                        fg_color = nested.cget('foreground')
-                                        if not fg_color or fg_color.lower() in ['black', '#000000', 'systemwindowtext']:
-                                            nested.config(foreground='orange')
-                                    except:
-                                        nested.config(foreground='orange')
+                                    # Let theme system handle foreground color automatically
+                                    # theme.update() above will apply correct colors
         except Exception as e:
             logger.debug(f'Error styling combobox popup: {e}', exc_info=True)
             pass  # Silently fail if styling can't be applied
@@ -2926,13 +2924,6 @@ class GalaxyGPS():
                 tritium_label = tk.Label(**label_kwargs)
                 tritium_label.grid(row=data_row, column=col_idx*2, padx=2, pady=5, sticky=tk.E)
                 theme.update(tritium_label)
-                # Ensure foreground color is themed (orange) if it's still black/unreadable
-                try:
-                    fg_color = tritium_label.cget('foreground')
-                    if not fg_color or fg_color.lower() in ['black', '#000000', 'systemwindowtext']:
-                        tritium_label.config(foreground='orange')
-                except:
-                    pass
                 if col_idx < len(headers) - 1:
                     separator4 = ttk.Separator(table_frame, orient=tk.VERTICAL)
                     separator4.grid(row=data_row, column=col_idx*2+1, padx=0, pady=2, sticky=tk.NS)
@@ -3113,25 +3104,26 @@ class GalaxyGPS():
             
             # Apply theme recursively to entire table_frame after all widgets are created
             # This ensures any widgets we missed get themed properly
+            # theme.update() will automatically apply correct foreground colors based on current theme
             theme.update(table_frame)
-            # Force foreground colors for labels that might still have black text
-            # Recursively check all labels in the table_frame
-            def fix_label_colors(widget):
-                """Recursively fix label foreground colors to be theme-appropriate."""
-                if isinstance(widget, tk.Label):
-                    try:
-                        fg_color = widget.cget('foreground')
-                        # Only change if it's black/unreadable and not a special color (blue links)
-                        if fg_color and fg_color.lower() in ['black', '#000000', 'systemwindowtext']:
-                            widget.config(foreground='orange')
-                    except:
-                        pass
-                elif isinstance(widget, tk.Frame):
-                    for child in widget.winfo_children():
-                        fix_label_colors(child)
-            # Apply to all widgets in table_frame
-            for widget in table_frame.winfo_children():
-                fix_label_colors(widget)
+            
+            # Style ttk.Separator widgets - they need special handling via ttk.Style
+            # Separators don't automatically get themed, so we style them to match theme foreground color
+            try:
+                separator_style = ttk.Style()
+                # Get theme foreground color from a label to match separator color
+                sample_label = tk.Label(table_frame)
+                theme.update(sample_label)
+                try:
+                    theme_fg = sample_label.cget('foreground')
+                    if theme_fg:
+                        # Configure separator background to match theme foreground color
+                        separator_style.configure('TSeparator', background=theme_fg)
+                except:
+                    pass
+                sample_label.destroy()
+            except:
+                pass
             
             # Finalize window setup after all widgets are created
             canvas.update_idletasks()
@@ -4081,6 +4073,8 @@ class GalaxyGPS():
                     separator = ttk.Separator(table_frame, orient=tk.VERTICAL)
                     separator.grid(row=header_row, column=i*2+1, padx=0, pady=2, sticky=tk.NS)
                     theme.update(separator)
+                    # ttk.Separator needs additional styling via ttk.Style
+                    # We'll configure this after all widgets are created
             
             # Get current next waypoint system name for highlighting
             current_next_waypoint = getattr(self, 'next_stop', None)
@@ -4342,25 +4336,26 @@ class GalaxyGPS():
             
             # Apply theme recursively to entire table_frame after all widgets are created
             # This ensures any widgets we missed get themed properly
+            # theme.update() will automatically apply correct foreground colors based on current theme
             theme.update(table_frame)
-            # Force foreground colors for labels that might still have black text
-            # Recursively check all labels in the table_frame
-            def fix_label_colors(widget):
-                """Recursively fix label foreground colors to be theme-appropriate."""
-                if isinstance(widget, tk.Label):
-                    try:
-                        fg_color = widget.cget('foreground')
-                        # Only change if it's black/unreadable and not a special color (blue links)
-                        if fg_color and fg_color.lower() in ['black', '#000000', 'systemwindowtext']:
-                            widget.config(foreground='orange')
-                    except:
-                        pass
-                elif isinstance(widget, tk.Frame):
-                    for child in widget.winfo_children():
-                        fix_label_colors(child)
-            # Apply to all widgets in table_frame
-            for widget in table_frame.winfo_children():
-                fix_label_colors(widget)
+            
+            # Style ttk.Separator widgets - they need special handling via ttk.Style
+            # Separators don't automatically get themed, so we style them to match theme foreground color
+            try:
+                separator_style = ttk.Style()
+                # Get theme foreground color from a label to match separator color
+                sample_label = tk.Label(table_frame)
+                theme.update(sample_label)
+                try:
+                    theme_fg = sample_label.cget('foreground')
+                    if theme_fg:
+                        # Configure separator background to match theme foreground color
+                        separator_style.configure('TSeparator', background=theme_fg)
+                except:
+                    pass
+                sample_label.destroy()
+            except:
+                pass
             
             # Finalize window setup after all widgets are created
             canvas.update_idletasks()
