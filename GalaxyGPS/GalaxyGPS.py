@@ -2850,10 +2850,12 @@ class GalaxyGPS():
                     bg=row_bg if row_bg else None  # Only set bg if row_bg is not empty
                 )
                 select_btn.grid(row=data_row, column=col_idx*2, padx=2, pady=5, sticky=tk.W)
+                theme.update(select_btn)
                 # Add separator after Select column
                 if col_idx < len(headers) - 1:
                     separator0 = ttk.Separator(table_frame, orient=tk.VERTICAL)
                     separator0.grid(row=data_row, column=col_idx*2+1, padx=0, pady=2, sticky=tk.NS)
+                    theme.update(separator0)
                 col_idx += 1
                 
                 # Highlight if this is the currently selected carrier
@@ -2862,87 +2864,135 @@ class GalaxyGPS():
                 
                 # Callsign (clickable to Inara) - use exact same width as header
                 callsign_width = column_widths[col_idx] if col_idx < len(column_widths) else 20
-                callsign_label = tk.Label(table_frame, text=callsign, fg="blue", cursor="hand2", width=callsign_width, anchor="w", bg=row_bg)
+                callsign_label = tk.Label(table_frame, text=callsign, fg="blue", cursor="hand2", width=callsign_width, anchor="w", bg=row_bg if row_bg else None)
                 callsign_label.grid(row=data_row, column=col_idx*2, padx=2, pady=5, sticky=tk.W)
+                theme.update(callsign_label)
                 callsign_label.bind("<Button-1>", lambda e, c=callsign: self.open_inara_carrier(c))
                 callsign_label.bind("<Enter>", lambda e, lbl=callsign_label: lbl.config(fg="darkblue", underline=True))
                 callsign_label.bind("<Leave>", lambda e, lbl=callsign_label: lbl.config(fg="blue", underline=False))
                 if col_idx < len(headers) - 1:
                     separator1 = ttk.Separator(table_frame, orient=tk.VERTICAL)
                     separator1.grid(row=data_row, column=col_idx*2+1, padx=0, pady=2, sticky=tk.NS)
+                    theme.update(separator1)
                 col_idx += 1
                 
                 # Name (clickable to Inara) - use exact same width as header
                 name_width = column_widths[col_idx] if col_idx < len(column_widths) else 20
-                name_label = tk.Label(table_frame, text=name, fg="blue", cursor="hand2", width=name_width, anchor="w", bg=row_bg)
+                name_label = tk.Label(table_frame, text=name, fg="blue", cursor="hand2", width=name_width, anchor="w", bg=row_bg if row_bg else None)
                 name_label.grid(row=data_row, column=col_idx*2, padx=2, pady=5, sticky=tk.W)
+                theme.update(name_label)
                 name_label.bind("<Button-1>", lambda e, c=callsign: self.open_inara_carrier(c))
                 name_label.bind("<Enter>", lambda e, lbl=name_label: lbl.config(fg="darkblue", underline=True))
                 name_label.bind("<Leave>", lambda e, lbl=name_label: lbl.config(fg="blue", underline=False))
                 if col_idx < len(headers) - 1:
                     separator2 = ttk.Separator(table_frame, orient=tk.VERTICAL)
                     separator2.grid(row=data_row, column=col_idx*2+1, padx=0, pady=2, sticky=tk.NS)
+                    theme.update(separator2)
                 col_idx += 1
                 
                 # EDSM button - before System column
                 edsm_btn_width = column_widths[col_idx] if col_idx < len(column_widths) else 6
-                edsm_btn = tk.Button(table_frame, text="EDSM", command=lambda s=system: self.open_edsm_system(s), width=edsm_btn_width, bg=row_bg)
+                btn_kwargs = {"master": table_frame, "text": "EDSM", "command": lambda s=system: self.open_edsm_system(s), "width": edsm_btn_width}
+                if row_bg:
+                    btn_kwargs["bg"] = row_bg
+                edsm_btn = tk.Button(**btn_kwargs)
                 edsm_btn.grid(row=data_row, column=col_idx*2, padx=2, pady=5, sticky=tk.W)
+                theme.update(edsm_btn)
                 if col_idx < len(headers) - 1:
                     separator_edsm = ttk.Separator(table_frame, orient=tk.VERTICAL)
                     separator_edsm.grid(row=data_row, column=col_idx*2+1, padx=0, pady=2, sticky=tk.NS)
+                    theme.update(separator_edsm)
                 col_idx += 1
                 
                 # System (clickable to Inara) - use exact same width as header
                 system_width = column_widths[col_idx] if col_idx < len(column_widths) else 20
-                system_label = tk.Label(table_frame, text=system, fg="blue", cursor="hand2", width=system_width, anchor="w", bg=row_bg)
+                system_label = tk.Label(table_frame, text=system, fg="blue", cursor="hand2", width=system_width, anchor="w", bg=row_bg if row_bg else None)
                 system_label.grid(row=data_row, column=col_idx*2, padx=2, pady=5, sticky=tk.W)
+                theme.update(system_label)
                 system_label.bind("<Button-1>", lambda e, s=system: self.open_inara_system(s))
                 system_label.bind("<Enter>", lambda e, lbl=system_label: lbl.config(fg="darkblue", underline=True))
                 system_label.bind("<Leave>", lambda e, lbl=system_label: lbl.config(fg="blue", underline=False))
                 if col_idx < len(headers) - 1:
                     separator3 = ttk.Separator(table_frame, orient=tk.VERTICAL)
                     separator3.grid(row=data_row, column=col_idx*2+1, padx=0, pady=2, sticky=tk.NS)
+                    theme.update(separator3)
                 col_idx += 1
                 
                 # Tritium (fuel / cargo) - right-align numeric, use exact same width as header
                 tritium_width = column_widths[col_idx] if col_idx < len(column_widths) else 20
-                tk.Label(table_frame, text=tritium_text, width=tritium_width, anchor="e", bg=row_bg).grid(row=data_row, column=col_idx*2, padx=2, pady=5, sticky=tk.E)
+                label_kwargs = {"master": table_frame, "text": tritium_text, "width": tritium_width, "anchor": "e"}
+                if row_bg:
+                    label_kwargs["bg"] = row_bg
+                tritium_label = tk.Label(**label_kwargs)
+                tritium_label.grid(row=data_row, column=col_idx*2, padx=2, pady=5, sticky=tk.E)
+                theme.update(tritium_label)
+                # Ensure foreground color is themed (orange) if it's still black/unreadable
+                try:
+                    fg_color = tritium_label.cget('foreground')
+                    if not fg_color or fg_color.lower() in ['black', '#000000', 'systemwindowtext']:
+                        tritium_label.config(foreground='orange')
+                except:
+                    pass
                 if col_idx < len(headers) - 1:
                     separator4 = ttk.Separator(table_frame, orient=tk.VERTICAL)
                     separator4.grid(row=data_row, column=col_idx*2+1, padx=0, pady=2, sticky=tk.NS)
+                    theme.update(separator4)
                 col_idx += 1
                 
                 # Balance - right-align numeric, use exact same width as header
                 balance_width = column_widths[col_idx] if col_idx < len(column_widths) else 20
-                tk.Label(table_frame, text=balance_formatted, width=balance_width, anchor="e", bg=row_bg).grid(row=data_row, column=col_idx*2, padx=2, pady=5, sticky=tk.E)
+                label_kwargs = {"master": table_frame, "text": balance_formatted, "width": balance_width, "anchor": "e"}
+                if row_bg:
+                    label_kwargs["bg"] = row_bg
+                balance_label = tk.Label(**label_kwargs)
+                balance_label.grid(row=data_row, column=col_idx*2, padx=2, pady=5, sticky=tk.E)
+                theme.update(balance_label)
                 if col_idx < len(headers) - 1:
                     separator5 = ttk.Separator(table_frame, orient=tk.VERTICAL)
                     separator5.grid(row=data_row, column=col_idx*2+1, padx=0, pady=2, sticky=tk.NS)
+                    theme.update(separator5)
                 col_idx += 1
                 
                 # Cargo - left-align text, use exact same width as header
                 cargo_width = column_widths[col_idx] if col_idx < len(column_widths) else 20
-                tk.Label(table_frame, text=cargo_text, width=cargo_width, anchor="w", bg=row_bg).grid(row=data_row, column=col_idx*2, padx=2, pady=5, sticky=tk.W)
+                label_kwargs = {"master": table_frame, "text": cargo_text, "width": cargo_width, "anchor": "w"}
+                if row_bg:
+                    label_kwargs["bg"] = row_bg
+                cargo_label = tk.Label(**label_kwargs)
+                cargo_label.grid(row=data_row, column=col_idx*2, padx=2, pady=5, sticky=tk.W)
+                theme.update(cargo_label)
                 if col_idx < len(headers) - 1:
                     separator6 = ttk.Separator(table_frame, orient=tk.VERTICAL)
                     separator6.grid(row=data_row, column=col_idx*2+1, padx=0, pady=2, sticky=tk.NS)
+                    theme.update(separator6)
                 col_idx += 1
                 
                 # State - use exact same width as header
                 state_width = column_widths[col_idx] if col_idx < len(column_widths) else 20
-                tk.Label(table_frame, text=state, width=state_width, anchor="w", bg=row_bg).grid(row=data_row, column=col_idx*2, padx=2, pady=5, sticky=tk.W)
+                label_kwargs = {"master": table_frame, "text": state, "width": state_width, "anchor": "w"}
+                if row_bg:
+                    label_kwargs["bg"] = row_bg
+                state_label = tk.Label(**label_kwargs)
+                state_label.grid(row=data_row, column=col_idx*2, padx=2, pady=5, sticky=tk.W)
+                theme.update(state_label)
                 if col_idx < len(headers) - 1:
                     separator7 = ttk.Separator(table_frame, orient=tk.VERTICAL)
                     separator7.grid(row=data_row, column=col_idx*2+1, padx=0, pady=2, sticky=tk.NS)
+                    theme.update(separator7)
                 col_idx += 1
                 
                 # Theme - use exact same width as header
                 theme_width = column_widths[col_idx] if col_idx < len(column_widths) else 20
-                tk.Label(table_frame, text=theme, width=theme_width, anchor="w", bg=row_bg).grid(row=data_row, column=col_idx*2, padx=2, pady=5, sticky=tk.W)
+                label_kwargs = {"master": table_frame, "text": theme, "width": theme_width, "anchor": "w"}
+                if row_bg:
+                    label_kwargs["bg"] = row_bg
+                theme_label = tk.Label(**label_kwargs)
+                theme_label.grid(row=data_row, column=col_idx*2, padx=2, pady=5, sticky=tk.W)
+                theme.update(theme_label)
                 if col_idx < len(headers) - 1:
                     separator8 = ttk.Separator(table_frame, orient=tk.VERTICAL)
                     separator8.grid(row=data_row, column=col_idx*2+1, padx=0, pady=2, sticky=tk.NS)
+                    theme.update(separator8)
                 col_idx += 1
                 
                 # Icy Rings (read-only indicator) - colored dot, center-aligned
@@ -2950,9 +3000,16 @@ class GalaxyGPS():
                 icy_rings_str = str(icy_rings).strip().lower() if icy_rings else ''
                 icy_rings_value = icy_rings_str == 'yes'
                 # Create a frame to center the canvas within the column
-                icy_rings_frame = tk.Frame(table_frame, bg=row_bg)
+                frame_kwargs = {"master": table_frame}
+                if row_bg:
+                    frame_kwargs["bg"] = row_bg
+                icy_rings_frame = tk.Frame(**frame_kwargs)
                 icy_rings_frame.grid(row=data_row, column=col_idx*2, padx=2, pady=5, sticky=tk.EW)
-                icy_rings_canvas = ThemeSafeCanvas(icy_rings_frame, width=20, height=20, highlightthickness=0, bg=row_bg)
+                theme.update(icy_rings_frame)
+                canvas_kwargs = {"master": icy_rings_frame, "width": 20, "height": 20, "highlightthickness": 0}
+                if row_bg:
+                    canvas_kwargs["bg"] = row_bg
+                icy_rings_canvas = ThemeSafeCanvas(**canvas_kwargs)
                 icy_rings_canvas.pack(anchor=tk.CENTER)  # Center the canvas in the frame
                 if icy_rings_value:
                     icy_rings_canvas.create_oval(5, 5, 15, 15, fill="red", outline="darkred", width=1)
@@ -2961,6 +3018,7 @@ class GalaxyGPS():
                 if col_idx < len(headers) - 1:
                     separator9 = ttk.Separator(table_frame, orient=tk.VERTICAL)
                     separator9.grid(row=data_row, column=col_idx*2+1, padx=0, pady=2, sticky=tk.NS)
+                    theme.update(separator9)
                 col_idx += 1
                 
                 # Pristine (read-only indicator) - colored dot, center-aligned
@@ -2968,9 +3026,16 @@ class GalaxyGPS():
                 pristine_str = str(pristine).strip().lower() if pristine else ''
                 pristine_value = pristine_str == 'yes'
                 # Create a frame to center the canvas within the column
-                pristine_frame = tk.Frame(table_frame, bg=row_bg)
+                frame_kwargs = {"master": table_frame}
+                if row_bg:
+                    frame_kwargs["bg"] = row_bg
+                pristine_frame = tk.Frame(**frame_kwargs)
                 pristine_frame.grid(row=data_row, column=col_idx*2, padx=2, pady=5, sticky=tk.EW)
-                pristine_canvas = ThemeSafeCanvas(pristine_frame, width=20, height=20, highlightthickness=0, bg=row_bg)
+                theme.update(pristine_frame)
+                canvas_kwargs = {"master": pristine_frame, "width": 20, "height": 20, "highlightthickness": 0}
+                if row_bg:
+                    canvas_kwargs["bg"] = row_bg
+                pristine_canvas = ThemeSafeCanvas(**canvas_kwargs)
                 pristine_canvas.pack(anchor=tk.CENTER)  # Center the canvas in the frame
                 if pristine_value:
                     pristine_canvas.create_oval(5, 5, 15, 15, fill="red", outline="darkred", width=1)
@@ -2979,6 +3044,7 @@ class GalaxyGPS():
                 if col_idx < len(headers) - 1:
                     separator10 = ttk.Separator(table_frame, orient=tk.VERTICAL)
                     separator10.grid(row=data_row, column=col_idx*2+1, padx=0, pady=2, sticky=tk.NS)
+                    theme.update(separator10)
                 col_idx += 1
                 
                 # Docking Access (read-only indicator) - colored dot, center-aligned
@@ -2986,9 +3052,16 @@ class GalaxyGPS():
                 docking_access_str = str(docking_access).strip().lower() if docking_access else ''
                 docking_access_value = docking_access_str in ['yes', 'all', 'friends', 'squadron']
                 # Create a frame to center the canvas within the column
-                docking_access_frame = tk.Frame(table_frame, bg=row_bg)
+                frame_kwargs = {"master": table_frame}
+                if row_bg:
+                    frame_kwargs["bg"] = row_bg
+                docking_access_frame = tk.Frame(**frame_kwargs)
                 docking_access_frame.grid(row=data_row, column=col_idx*2, padx=2, pady=5, sticky=tk.EW)
-                docking_access_canvas = ThemeSafeCanvas(docking_access_frame, width=20, height=20, highlightthickness=0, bg=row_bg)
+                theme.update(docking_access_frame)
+                canvas_kwargs = {"master": docking_access_frame, "width": 20, "height": 20, "highlightthickness": 0}
+                if row_bg:
+                    canvas_kwargs["bg"] = row_bg
+                docking_access_canvas = ThemeSafeCanvas(**canvas_kwargs)
                 docking_access_canvas.pack(anchor=tk.CENTER)  # Center the canvas in the frame
                 if docking_access_value:
                     docking_access_canvas.create_oval(5, 5, 15, 15, fill="red", outline="darkred", width=1)
@@ -2997,6 +3070,7 @@ class GalaxyGPS():
                 if col_idx < len(headers) - 1:
                     separator11 = ttk.Separator(table_frame, orient=tk.VERTICAL)
                     separator11.grid(row=data_row, column=col_idx*2+1, padx=0, pady=2, sticky=tk.NS)
+                    theme.update(separator11)
                 col_idx += 1
                 
                 # Notorious Access (read-only indicator) - colored dot, center-aligned
@@ -3007,9 +3081,16 @@ class GalaxyGPS():
                 else:
                     notorious_access_value = bool(notorious_access) if notorious_access else False
                 # Create a frame to center the canvas within the column
-                notorious_access_frame = tk.Frame(table_frame, bg=row_bg)
+                frame_kwargs = {"master": table_frame}
+                if row_bg:
+                    frame_kwargs["bg"] = row_bg
+                notorious_access_frame = tk.Frame(**frame_kwargs)
                 notorious_access_frame.grid(row=data_row, column=col_idx*2, padx=2, pady=5, sticky=tk.EW)
-                notorious_access_canvas = ThemeSafeCanvas(notorious_access_frame, width=20, height=20, highlightthickness=0, bg=row_bg)
+                theme.update(notorious_access_frame)
+                canvas_kwargs = {"master": notorious_access_frame, "width": 20, "height": 20, "highlightthickness": 0}
+                if row_bg:
+                    canvas_kwargs["bg"] = row_bg
+                notorious_access_canvas = ThemeSafeCanvas(**canvas_kwargs)
                 notorious_access_canvas.pack(anchor=tk.CENTER)  # Center the canvas in the frame
                 if notorious_access_value:
                     notorious_access_canvas.create_oval(5, 5, 15, 15, fill="red", outline="darkred", width=1)
@@ -3018,11 +3099,39 @@ class GalaxyGPS():
                 if col_idx < len(headers) - 1:
                     separator12 = ttk.Separator(table_frame, orient=tk.VERTICAL)
                     separator12.grid(row=data_row, column=col_idx*2+1, padx=0, pady=2, sticky=tk.NS)
+                    theme.update(separator12)
                 col_idx += 1
                 
                 # Last Updated - use exact same width as header
                 last_updated_width = column_widths[col_idx] if col_idx < len(column_widths) else 20
-                tk.Label(table_frame, text=last_updated, width=last_updated_width, anchor="w", bg=row_bg).grid(row=data_row, column=col_idx*2, padx=2, pady=5, sticky=tk.W)
+                label_kwargs = {"master": table_frame, "text": last_updated, "width": last_updated_width, "anchor": "w"}
+                if row_bg:
+                    label_kwargs["bg"] = row_bg
+                last_updated_label = tk.Label(**label_kwargs)
+                last_updated_label.grid(row=data_row, column=col_idx*2, padx=2, pady=5, sticky=tk.W)
+                theme.update(last_updated_label)
+            
+            # Apply theme recursively to entire table_frame after all widgets are created
+            # This ensures any widgets we missed get themed properly
+            theme.update(table_frame)
+            # Force foreground colors for labels that might still have black text
+            # Recursively check all labels in the table_frame
+            def fix_label_colors(widget):
+                """Recursively fix label foreground colors to be theme-appropriate."""
+                if isinstance(widget, tk.Label):
+                    try:
+                        fg_color = widget.cget('foreground')
+                        # Only change if it's black/unreadable and not a special color (blue links)
+                        if fg_color and fg_color.lower() in ['black', '#000000', 'systemwindowtext']:
+                            widget.config(foreground='orange')
+                    except:
+                        pass
+                elif isinstance(widget, tk.Frame):
+                    for child in widget.winfo_children():
+                        fix_label_colors(child)
+            # Apply to all widgets in table_frame
+            for widget in table_frame.winfo_children():
+                fix_label_colors(widget)
             
             # Finalize window setup after all widgets are created
             canvas.update_idletasks()
@@ -3971,6 +4080,7 @@ class GalaxyGPS():
                 if i < len(headers) - 1:
                     separator = ttk.Separator(table_frame, orient=tk.VERTICAL)
                     separator.grid(row=header_row, column=i*2+1, padx=0, pady=2, sticky=tk.NS)
+                    theme.update(separator)
             
             # Get current next waypoint system name for highlighting
             current_next_waypoint = getattr(self, 'next_stop', None)
@@ -4023,11 +4133,17 @@ class GalaxyGPS():
                 # Step number - use exact same width calculation as header for perfect alignment
                 step_width = column_widths[0] if col_idx < len(column_widths) else 4
                 # Ensure width matches header exactly (header doesn't cap step number width)
-                tk.Label(table_frame, text=str(idx + 1), width=step_width, anchor="w", bg=row_bg).grid(row=data_row, column=col_idx*2, padx=2, pady=5, sticky=tk.W)
+                label_kwargs = {"master": table_frame, "text": str(idx + 1), "width": step_width, "anchor": "w"}
+                if row_bg:
+                    label_kwargs["bg"] = row_bg
+                step_label = tk.Label(**label_kwargs)
+                step_label.grid(row=data_row, column=col_idx*2, padx=2, pady=5, sticky=tk.W)
+                theme.update(step_label)
                 # Add separator after step number
                 if col_idx < len(headers) - 1:
                     separator_step = ttk.Separator(table_frame, orient=tk.VERTICAL)
                     separator_step.grid(row=data_row, column=col_idx*2+1, padx=0, pady=2, sticky=tk.NS)
+                    theme.update(separator_step)
                 col_idx += 1
                 
                 # Display each column - use column_widths to match header widths
@@ -4057,14 +4173,24 @@ class GalaxyGPS():
                             system_name_for_edsm = value if value else None
                         
                         if system_name_for_edsm:
-                            edsm_btn = tk.Button(table_frame, text="EDSM", command=lambda s=system_name_for_edsm: self.open_edsm_system(s), width=edsm_col_width, bg=row_bg)
+                            btn_kwargs = {"master": table_frame, "text": "EDSM", "command": lambda s=system_name_for_edsm: self.open_edsm_system(s), "width": edsm_col_width}
+                            if row_bg:
+                                btn_kwargs["bg"] = row_bg
+                            edsm_btn = tk.Button(**btn_kwargs)
                             edsm_btn.grid(row=data_row, column=col_idx*2, padx=2, pady=5, sticky=tk.W)
+                            theme.update(edsm_btn)
                         else:
                             # Empty cell if no system name
-                            tk.Label(table_frame, text="", width=edsm_col_width, bg=row_bg).grid(row=data_row, column=col_idx*2, padx=2, pady=5, sticky=tk.W)
+                            label_kwargs = {"master": table_frame, "text": "", "width": edsm_col_width}
+                            if row_bg:
+                                label_kwargs["bg"] = row_bg
+                            empty_label = tk.Label(**label_kwargs)
+                            empty_label.grid(row=data_row, column=col_idx*2, padx=2, pady=5, sticky=tk.W)
+                            theme.update(empty_label)
                         if col_idx < len(headers) - 1:
                             separator_edsm = ttk.Separator(table_frame, orient=tk.VERTICAL)
                             separator_edsm.grid(row=data_row, column=col_idx*2+1, padx=0, pady=2, sticky=tk.NS)
+                            theme.update(separator_edsm)
                         col_idx += 1
                         
                         # Now add System Name at the next column position
@@ -4078,34 +4204,57 @@ class GalaxyGPS():
                             current_system = value
                             if current_system and current_system.lower() == prev_system_name:
                                 # System name repeats, show empty
-                                system_label = tk.Label(table_frame, text="", width=col_width, anchor="w", bg=row_bg)
+                                label_kwargs = {"master": table_frame, "text": "", "width": col_width, "anchor": "w"}
+                                if row_bg:
+                                    label_kwargs["bg"] = row_bg
+                                system_label = tk.Label(**label_kwargs)
                                 system_label.grid(row=data_row, column=col_idx*2, padx=2, pady=5, sticky=tk.W)
+                                theme.update(system_label)
                             else:
                                 # New system name, display it
                                 if current_system:
-                                    system_label = tk.Label(table_frame, text=current_system, fg="blue", cursor="hand2", width=col_width, anchor="w", bg=row_bg)
+                                    label_kwargs = {"master": table_frame, "text": current_system, "fg": "blue", "cursor": "hand2", "width": col_width, "anchor": "w"}
+                                    if row_bg:
+                                        label_kwargs["bg"] = row_bg
+                                    system_label = tk.Label(**label_kwargs)
                                     system_label.grid(row=data_row, column=col_idx*2, padx=2, pady=5, sticky=tk.W)
+                                    theme.update(system_label)
                                     system_label.bind("<Button-1>", lambda e, s=current_system: self.open_inara_system(s))
                                     system_label.bind("<Enter>", lambda e, lbl=system_label: lbl.config(fg="darkblue", underline=True))
                                     system_label.bind("<Leave>", lambda e, lbl=system_label: lbl.config(fg="blue", underline=False))
                                 else:
-                                    tk.Label(table_frame, text="", width=col_width, anchor="w", bg=row_bg).grid(row=data_row, column=col_idx*2, padx=2, pady=5, sticky=tk.W)
+                                    label_kwargs = {"master": table_frame, "text": "", "width": col_width, "anchor": "w"}
+                                    if row_bg:
+                                        label_kwargs["bg"] = row_bg
+                                    empty_label = tk.Label(**label_kwargs)
+                                    empty_label.grid(row=data_row, column=col_idx*2, padx=2, pady=5, sticky=tk.W)
+                                    theme.update(empty_label)
                             prev_system_name = current_system.lower() if current_system else None
                         else:
                             # Normal system name display (clickable to Inara)
                             if value:
-                                system_label = tk.Label(table_frame, text=value, fg="blue", cursor="hand2", width=col_width, anchor="w", bg=row_bg)
+                                label_kwargs = {"master": table_frame, "text": value, "fg": "blue", "cursor": "hand2", "width": col_width, "anchor": "w"}
+                                if row_bg:
+                                    label_kwargs["bg"] = row_bg
+                                system_label = tk.Label(**label_kwargs)
                                 system_label.grid(row=data_row, column=col_idx*2, padx=2, pady=5, sticky=tk.W)
+                                theme.update(system_label)
                                 system_label.bind("<Button-1>", lambda e, s=value: self.open_inara_system(s))
                                 system_label.bind("<Enter>", lambda e, lbl=system_label: lbl.config(fg="darkblue", underline=True))
                                 system_label.bind("<Leave>", lambda e, lbl=system_label: lbl.config(fg="blue", underline=False))
                             else:
-                                tk.Label(table_frame, text="", width=col_width, anchor="w", bg=row_bg).grid(row=data_row, column=col_idx*2, padx=2, pady=5, sticky=tk.W)
+                                label_kwargs = {"master": table_frame, "text": "", "width": col_width, "anchor": "w"}
+                                if row_bg:
+                                    label_kwargs["bg"] = row_bg
+                                empty_label = tk.Label(**label_kwargs)
+                                empty_label.grid(row=data_row, column=col_idx*2, padx=2, pady=5, sticky=tk.W)
+                                theme.update(empty_label)
                         
                         # Add separator after System Name and move to next column
                         if col_idx < len(headers) - 1:
                             separator_system = ttk.Separator(table_frame, orient=tk.VERTICAL)
                             separator_system.grid(row=data_row, column=col_idx*2+1, padx=0, pady=2, sticky=tk.NS)
+                            theme.update(separator_system)
                         col_idx += 1
                         continue  # Skip the rest of the loop for System Name since we've handled it
                     
@@ -4131,11 +4280,18 @@ class GalaxyGPS():
                             dot_outline = "darkred"
                         
                         # Create a frame to center the canvas within the column
-                        checkbox_frame = tk.Frame(table_frame, bg=row_bg)
+                        frame_kwargs = {"master": table_frame}
+                        if row_bg:
+                            frame_kwargs["bg"] = row_bg
+                        checkbox_frame = tk.Frame(**frame_kwargs)
                         checkbox_frame.grid(row=data_row, column=col_idx*2, padx=2, pady=5, sticky=tk.EW)
+                        theme.update(checkbox_frame)
                         
                         # Create a canvas to draw a colored dot (centered in frame)
-                        checkbox_canvas = ThemeSafeCanvas(checkbox_frame, width=20, height=20, highlightthickness=0, bg=row_bg)
+                        canvas_kwargs = {"master": checkbox_frame, "width": 20, "height": 20, "highlightthickness": 0}
+                        if row_bg:
+                            canvas_kwargs["bg"] = row_bg
+                        checkbox_canvas = ThemeSafeCanvas(**canvas_kwargs)
                         checkbox_canvas.pack(anchor=tk.CENTER)  # Center the canvas in the frame
                         
                         if checkbox_value:
@@ -4169,14 +4325,42 @@ class GalaxyGPS():
                         anchor = "e" if is_numeric else "w"
                         sticky = tk.E if is_numeric else tk.W
                         # Use col_width which now matches header width calculation exactly
-                        tk.Label(table_frame, text=display_value, width=col_width, anchor=anchor, bg=row_bg).grid(row=data_row, column=col_idx*2, padx=2, pady=5, sticky=sticky)
+                        label_kwargs = {"master": table_frame, "text": display_value, "width": col_width, "anchor": anchor}
+                        if row_bg:
+                            label_kwargs["bg"] = row_bg
+                        value_label = tk.Label(**label_kwargs)
+                        value_label.grid(row=data_row, column=col_idx*2, padx=2, pady=5, sticky=sticky)
+                        theme.update(value_label)
                     
                     # Add separator after each column (except the last)
                     if col_idx < len(headers) - 1:
                         separator = ttk.Separator(table_frame, orient=tk.VERTICAL)
                         separator.grid(row=data_row, column=col_idx*2+1, padx=0, pady=2, sticky=tk.NS)
+                        theme.update(separator)
                     
                     col_idx += 1
+            
+            # Apply theme recursively to entire table_frame after all widgets are created
+            # This ensures any widgets we missed get themed properly
+            theme.update(table_frame)
+            # Force foreground colors for labels that might still have black text
+            # Recursively check all labels in the table_frame
+            def fix_label_colors(widget):
+                """Recursively fix label foreground colors to be theme-appropriate."""
+                if isinstance(widget, tk.Label):
+                    try:
+                        fg_color = widget.cget('foreground')
+                        # Only change if it's black/unreadable and not a special color (blue links)
+                        if fg_color and fg_color.lower() in ['black', '#000000', 'systemwindowtext']:
+                            widget.config(foreground='orange')
+                    except:
+                        pass
+                elif isinstance(widget, tk.Frame):
+                    for child in widget.winfo_children():
+                        fix_label_colors(child)
+            # Apply to all widgets in table_frame
+            for widget in table_frame.winfo_children():
+                fix_label_colors(widget)
             
             # Finalize window setup after all widgets are created
             canvas.update_idletasks()
