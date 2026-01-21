@@ -20,6 +20,7 @@ from tkinter import *
 import requests  # type: ignore
 from config import appname  # type: ignore
 from monitor import monitor  # type: ignore
+from theme import theme  # type: ignore
 
 from . import AutoCompleter, PlaceHolder
 from .updater import SpanshUpdater
@@ -544,7 +545,10 @@ class GalaxyGPS():
             
             # Mark GUI as initialized
             self._gui_initialized = True
-
+            
+            # Apply EDMC theme to the main frame and all widgets
+            theme.update(self.frame)
+            
             return self.frame
         except Exception as e:
             logger.error(f"Error in init_gui: {traceback.format_exc()}")
@@ -2395,10 +2399,11 @@ class GalaxyGPS():
     
     def _style_combobox_popup(self, bg_color):
         """
-        Style the combobox dropdown popup window to match EDMC dark theme.
+        Style the combobox dropdown popup window to match EDMC theme.
+        Uses EDMC's theme system to properly apply colors to the popup window.
         
         Args:
-            bg_color: Background color to use for the dropdown
+            bg_color: Background color to use for the dropdown (used for fallback)
         """
         try:
             # Get the popup window (Toplevel) that contains the listbox
@@ -2407,34 +2412,37 @@ class GalaxyGPS():
             # Find the popup window (it's usually the most recent Toplevel)
             for widget in root.winfo_children():
                 if isinstance(widget, tk.Toplevel) and widget.winfo_viewable():
-                    # Style the popup window itself
-                    widget.config(bg=bg_color)
-                    # Find the Listbox within the popup
+                    # Use EDMC's theme system to properly style the popup window
+                    # This will apply the correct theme colors including background
+                    theme.update(widget)
+                    
+                    # Also explicitly style the Listbox within the popup to ensure it matches
                     for child in widget.winfo_children():
                         if isinstance(child, tk.Listbox):
-                            child.config(
-                                bg=bg_color,
-                                fg='orange',
-                                selectbackground=bg_color,
-                                selectforeground='orange',
-                                highlightbackground=bg_color,
-                                highlightcolor='orange'
-                            )
+                            # Apply theme to the listbox
+                            theme.update(child)
+                            # Ensure foreground color matches theme (typically orange for EDMC)
+                            try:
+                                fg_color = child.cget('foreground')
+                                if not fg_color or fg_color.lower() in ['black', '#000000', 'systemwindowtext']:
+                                    child.config(foreground='orange')
+                            except:
+                                child.config(foreground='orange')
                         # Also style any Frame containers
                         elif isinstance(child, tk.Frame):
-                            child.config(bg=bg_color)
+                            theme.update(child)
                             # Recursively style nested widgets
                             for nested in child.winfo_children():
                                 if isinstance(nested, tk.Listbox):
-                                    nested.config(
-                                        bg=bg_color,
-                                        fg='orange',
-                                        selectbackground=bg_color,
-                                        selectforeground='orange',
-                                        highlightbackground=bg_color,
-                                        highlightcolor='orange'
-                                    )
-        except:
+                                    theme.update(nested)
+                                    try:
+                                        fg_color = nested.cget('foreground')
+                                        if not fg_color or fg_color.lower() in ['black', '#000000', 'systemwindowtext']:
+                                            nested.config(foreground='orange')
+                                    except:
+                                        nested.config(foreground='orange')
+        except Exception as e:
+            logger.debug(f'Error styling combobox popup: {e}', exc_info=True)
             pass  # Silently fail if styling can't be applied
     
     def open_selected_carrier_inara(self):
@@ -2509,6 +2517,8 @@ class GalaxyGPS():
             # Create new window
             details_window = tk.Toplevel(self.parent)
             details_window.title("Fleet Carrier Details")
+            # Apply EDMC theme to the window
+            theme.update(details_window)
             
             # Define headers and column widths first - add EDSM button before System
             headers = ["Select", "Callsign", "Name", "EDSM", "System", "Tritium", "Balance", "Cargo", "State", "Theme", "Icy Rings", "Pristine", "Docking Access", "Notorious Access", "Last Updated"]
@@ -2639,8 +2649,9 @@ class GalaxyGPS():
             window_width = max(window_width, 800)  # At least 800px wide
             
             # Create main container with horizontal and vertical scrolling
-            main_frame = tk.Frame(details_window, bg="white")
+            main_frame = tk.Frame(details_window)
             main_frame.pack(fill=tk.BOTH, expand=True)
+            theme.update(main_frame)
             
             # Create horizontal scrollbar
             h_scrollbar = ttk.Scrollbar(main_frame, orient=tk.HORIZONTAL)
@@ -2651,17 +2662,19 @@ class GalaxyGPS():
             v_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
             
             # Create canvas with both scrollbars
-            canvas = ThemeSafeCanvas(main_frame, bg="white", 
+            canvas = ThemeSafeCanvas(main_frame,
                              xscrollcommand=h_scrollbar.set,
                              yscrollcommand=v_scrollbar.set)
             canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+            theme.update(canvas)
             
             h_scrollbar.config(command=canvas.xview)
             v_scrollbar.config(command=canvas.yview)
             
-            scrollable_frame = tk.Frame(canvas, bg="white")
+            scrollable_frame = tk.Frame(canvas)
             
             canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
+            theme.update(scrollable_frame)
             
             # Update canvas scroll region when frame size changes
             def on_frame_configure(event):
@@ -2685,8 +2698,9 @@ class GalaxyGPS():
             canvas.bind('<Configure>', on_canvas_configure)
             
             # Create a single table frame that will contain both header and data rows in one grid
-            table_frame = tk.Frame(scrollable_frame, bg="white")
+            table_frame = tk.Frame(scrollable_frame)
             table_frame.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+            theme.update(table_frame)
             
             # Determine which columns should be right-aligned (numeric columns)
             numeric_columns_fleet = set()
@@ -2717,18 +2731,25 @@ class GalaxyGPS():
                     sticky = tk.W
                 # Use exact same width as data cells for perfect alignment
                 header_width = column_widths[i] if i < len(column_widths) else 20
-                label = tk.Label(table_frame, text=header, font=("Arial", 9, "bold"), bg="lightgray", width=header_width, anchor=anchor)
+                label = tk.Label(table_frame, text=header, font=("Arial", 9, "bold"), width=header_width, anchor=anchor)
                 label.grid(row=header_row, column=i*2, padx=2, pady=5, sticky=sticky)
+                theme.update(label)
                 # Add vertical separator after each column (except the last)
                 if i < len(headers) - 1:
                     separator = ttk.Separator(table_frame, orient=tk.VERTICAL)
                     separator.grid(row=header_row, column=i*2+1, padx=0, pady=2, sticky=tk.NS)
             
             # Carrier data rows (rows 1+) - use same grid as header for perfect alignment
+            # Get background color from theme for alternating rows
+            try:
+                base_bg = table_frame.cget('bg')
+                # Use slightly lighter shade for alternating rows if possible
+                # Otherwise theme will handle it
+                row_bg = base_bg
+            except:
+                row_bg = None
             for idx, carrier in enumerate(sorted(carriers, key=lambda x: x.get('last_updated', ''), reverse=True)):
                 data_row = idx + 1  # Start from row 1 (row 0 is header)
-                # Alternate row background color
-                row_bg = "white" if idx % 2 == 0 else "#f0f0f0"
                 
                 callsign = carrier.get('callsign', 'Unknown')
                 name = carrier.get('name', '') or 'Unnamed'
@@ -3019,10 +3040,15 @@ class GalaxyGPS():
             details_window.minsize(800, 400)  # Minimum size to show content
             
             # Close button (outside scrollable area)
-            close_btn_frame = tk.Frame(details_window, bg="white")
+            close_btn_frame = tk.Frame(details_window)
             close_btn_frame.pack(pady=5)
+            theme.update(close_btn_frame)
             close_btn = tk.Button(close_btn_frame, text="Close", command=details_window.destroy)
             close_btn.pack()
+            theme.update(close_btn)
+            
+            # Apply theme to all widgets in the window recursively
+            theme.update(details_window)
             
         except Exception:
             logger.warning('!! Error showing carrier details window: ' + traceback.format_exc(), exc_info=False)
@@ -3761,6 +3787,8 @@ class GalaxyGPS():
             # Create new window
             route_window = tk.Toplevel(self.parent)
             route_window.title("Route View")
+            # Apply EDMC theme to the window
+            theme.update(route_window)
             
             # Store reference to this window for dynamic updates
             self.route_window_ref = route_window
@@ -3786,17 +3814,19 @@ class GalaxyGPS():
             v_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
             
             # Create canvas with both scrollbars
-            canvas = ThemeSafeCanvas(main_frame, bg="white",
+            canvas = ThemeSafeCanvas(main_frame,
                              xscrollcommand=h_scrollbar.set,
                              yscrollcommand=v_scrollbar.set)
             canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+            theme.update(canvas)
             
             h_scrollbar.config(command=canvas.xview)
             v_scrollbar.config(command=canvas.yview)
             
-            scrollable_frame = tk.Frame(canvas, bg="white")
+            scrollable_frame = tk.Frame(canvas)
             
             canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
+            theme.update(scrollable_frame)
             
             # Update canvas scroll region when frame size changes
             def on_frame_configure(event):
@@ -3928,8 +3958,9 @@ class GalaxyGPS():
                     anchor = "w"  # Left-align for text columns
                     sticky_val = tk.W
                 # Header label with grey background and bold text
-                label = tk.Label(table_frame, text=header, font=("Arial", 9, "bold"), bg="lightgray", width=width, anchor=anchor)
+                label = tk.Label(table_frame, text=header, font=("Arial", 9, "bold"), width=width, anchor=anchor)
                 label.grid(row=header_row, column=i*2, padx=2, pady=5, sticky=sticky_val)
+                theme.update(label)
                 # Add vertical separator after each column (except the last)
                 if i < len(headers) - 1:
                     separator = ttk.Separator(table_frame, orient=tk.VERTICAL)
@@ -3965,11 +3996,19 @@ class GalaxyGPS():
                     if system_name_in_row.lower() == current_next_waypoint.lower():
                         is_current_waypoint = True
                 
-                # Alternate row background color, but highlight current waypoint
-                if is_current_waypoint:
-                    row_bg = "#fff9c4"  # Light yellow highlight for current waypoint
-                else:
-                    row_bg = "white" if idx % 2 == 0 else "#f0f0f0"
+                # Get row background color from theme
+                # Highlight current waypoint with a different color
+                try:
+                    base_bg = table_frame.cget('bg')
+                    row_bg = base_bg
+                    if is_current_waypoint:
+                        # Keep highlight color for current waypoint even with theme
+                        row_bg = "#fff9c4"  # Light yellow highlight for current waypoint
+                except:
+                    if is_current_waypoint:
+                        row_bg = "#fff9c4"
+                    else:
+                        row_bg = None
                 
                 col_idx = 0
                 
@@ -4150,10 +4189,15 @@ class GalaxyGPS():
             route_window.minsize(800, 400)  # Minimum size to show content
             
             # Close button (outside scrollable area)
-            close_btn_frame = tk.Frame(route_window, bg="white")
+            close_btn_frame = tk.Frame(route_window)
             close_btn_frame.pack(pady=5)
+            theme.update(close_btn_frame)
             close_btn = tk.Button(close_btn_frame, text="Close", command=on_window_close)
             close_btn.pack()
+            theme.update(close_btn)
+            
+            # Apply theme to all widgets in the window recursively
+            theme.update(route_window)
             
         except Exception:
             logger.warning('!! Error showing route window: ' + traceback.format_exc(), exc_info=False)
