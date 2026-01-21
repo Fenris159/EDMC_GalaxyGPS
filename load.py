@@ -6,13 +6,13 @@ from companion import SERVER_LIVE, SERVER_LEGACY, SERVER_BETA  # type: ignore
 
 # Import GalaxyGPS class - this must work regardless of plugin folder name
 try:
-    from GalaxyGPS.GalaxyGPS import GalaxyGPS
+    from GalaxyGPS import GalaxyGPS
 except ImportError as e:
     # If import fails, try to add the plugin directory to sys.path
     plugin_dir = os.path.dirname(os.path.abspath(__file__))
     if plugin_dir not in sys.path:
         sys.path.insert(0, plugin_dir)
-    from GalaxyGPS.GalaxyGPS import GalaxyGPS
+    from GalaxyGPS import GalaxyGPS
 
 galaxy_gps = None
 
