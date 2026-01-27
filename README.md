@@ -16,7 +16,7 @@ GalaxyGPS started as an evolution from SpanshRouter, but has grown into somethin
 
 ## Current Version: 1.5.0
 
-This major release brings comprehensive multi-language support, enhanced fleet carrier management features, and numerous quality-of-life improvements. See the <a href="CHANGELOG.md" target="_blank" rel="noopener noreferrer">Changelog</a> for full details!
+This major release brings comprehensive multi-language support, enhanced fleet carrier management features, and numerous quality-of-life improvements. See the [Changelog](CHANGELOG.md) for full details!
 
 ---
 
@@ -26,7 +26,7 @@ This major release brings comprehensive multi-language support, enhanced fleet c
 
 #### Import Routes from Spansh or Create Your Own
 
-- Import any route from <a href="https://www.spansh.co.uk/plotter" target="_blank" rel="noopener noreferrer">Spansh Plotter</a> - the plugin automatically detects route types (Galaxy Routes, Fleet Carrier Routes, Road to Riches, Neutron Routes)
+- Import any route from [Spansh Plotter](https://www.spansh.co.uk/plotter) - the plugin automatically detects route types (Galaxy Routes, Fleet Carrier Routes, Road to Riches, Neutron Routes)
 - Create your own custom CSV files with just system names
 - Plot routes directly from EDMC with the "Plot Route" button
 - Automatic waypoint detection - the plugin knows where you are and sets the next destination
@@ -99,7 +99,7 @@ All buttons, labels, messages, and windows are fully translated and update autom
 
 ### Getting Started is Easy
 
-1. **Install the Plugin** (see <a href="#installation" target="_blank" rel="noopener noreferrer">Installation</a> below for detailed steps)
+1. **Install the Plugin** (see [Installation](#installation) below for detailed steps)
 2. **Enable CAPI** in EDMC Settings (required for fleet carrier features)
 3. **Optional**: Set up EDSM API for Icy Rings/Pristine detection
 4. **Start Using**: Import a route or plot one directly!
@@ -108,7 +108,7 @@ All buttons, labels, messages, and windows are fully translated and update autom
 
 **To Import a Route:**
 
-1. Generate a route on <a href="https://www.spansh.co.uk/plotter" target="_blank" rel="noopener noreferrer">Spansh Plotter</a>
+1. Generate a route on [Spansh Plotter](https://www.spansh.co.uk/plotter)
 2. Download the CSV file
 3. Click "Import File" in GalaxyGPS
 4. Select your CSV file
@@ -147,7 +147,7 @@ All buttons, labels, messages, and windows are fully translated and update autom
    - Click the **"Open"** button
 
 2. **Download the Latest Release**:
-   - Visit the <a href="https://github.com/Fenris159/EDMC_GalaxyGPS/releases/latest" target="_blank" rel="noopener noreferrer">Latest Release Page</a>
+   - Visit the [Latest Release Page](https://github.com/Fenris159/EDMC_GalaxyGPS/releases/latest)
    - Download the **Source code (zip)** file
    - **Important**: Always use releases from this repository (`Fenris159/EDMC_GalaxyGPS`)
 
@@ -171,7 +171,7 @@ All buttons, labels, messages, and windows are fully translated and update autom
 
 - Install **wl-clipboard**: `sudo apt-get install wl-clipboard`
 - Set environment variable: `export EDMC_GALAXYGPS_XCLIP="/usr/bin/wl-copy"`
-- See <a href="#wayland-support" target="_blank" rel="noopener noreferrer">Wayland Support</a> section below for detailed setup instructions
+- See [Wayland Support](#wayland-support) section below for detailed setup instructions
 
 ---
 
@@ -192,7 +192,7 @@ To use all features of GalaxyGPS, you'll need to configure the following in EDMC
 
 1. Open EDMC Settings
 2. Navigate to the "EDSM" tab
-3. Enter your EDSM API key (get one from <a href="https://www.edsm.net/en/settings/api" target="_blank" rel="noopener noreferrer">EDSM.net</a>)
+3. Enter your EDSM API key (get one from [EDSM.net](https://www.edsm.net/en/settings/api))
 4. Ensure the connection is active
 
 **Why it's needed**: The plugin queries EDSM to determine if a carrier's current system has icy rings and if they're pristine quality. This information helps you find the best mining locations.
@@ -201,7 +201,7 @@ To use all features of GalaxyGPS, you'll need to configure the following in EDMC
 
 1. Open EDMC Settings
 2. Navigate to the "Inara" tab
-3. Enter your INARA API key (get one from <a href="https://inara.cz/settings/api/" target="_blank" rel="noopener noreferrer">INARA.cz</a>)
+3. Enter your INARA API key (get one from [INARA.cz](https://inara.cz/settings/api/))
 
 **Why it's recommended**: While most INARA features work via web links, having the API enabled provides better overall EDMC integration.
 
@@ -334,7 +334,7 @@ GalaxyGPS features an **automatic update system** that checks for new versions w
 1. **Automatic Check**: When EDMC starts, the plugin checks GitHub for new versions
 2. **Update Notification**: If available, a dialog shows the new version and changelog
 3. **Installation**: If you choose to install, the update downloads when you close EDMC
-4. **Manual Updates**: You can also download releases manually from the <a href="https://github.com/Fenris159/EDMC_GalaxyGPS/releases" target="_blank" rel="noopener noreferrer">GitHub repository</a>
+4. **Manual Updates**: You can also download releases manually from the [GitHub repository](https://github.com/Fenris159/EDMC_GalaxyGPS/releases)
 
 **Note**: Auto-updates require an active internet connection and only download if you confirm the installation prompt.
 
@@ -342,13 +342,13 @@ GalaxyGPS features an **automatic update system** that checks for new versions w
 
 ## Known Issues
 
-Currently, there are no known issues! If you encounter any problems, please report them on the <a href="https://github.com/Fenris159/EDMC_GalaxyGPS/issues" target="_blank" rel="noopener noreferrer">GitHub Issues page</a>.
+Currently, there are no known issues! If you encounter any problems, please report them on the [GitHub Issues page](https://github.com/Fenris159/EDMC_GalaxyGPS/issues).
 
 ---
 
 ## Support the Project 💝
 
-If you enjoy using GalaxyGPS and would like to see more updates and features, please consider supporting its development! You can kindly offer support by clicking the **Sponsor** button or sponsor links on the <a href="https://github.com/Fenris159/EDMC_GalaxyGPS" target="_blank" rel="noopener noreferrer">GitHub repository</a> — it helps make continued development possible. Thank you!
+If you enjoy using GalaxyGPS and would like to see more updates and features, please consider supporting its development! You can kindly offer support by clicking the **Sponsor** button or sponsor links on the [GitHub repository](https://github.com/Fenris159/EDMC_GalaxyGPS) — it helps make continued development possible. Thank you!
 
 ---
 
