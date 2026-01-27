@@ -1,16 +1,15 @@
-
-import ast
 import csv
 import json
 import logging
 import math
 import os
+import queue
 import re
 import subprocess
 import sys
+import threading
 import tkinter as tk
 import tkinter.filedialog as filedialog
-import tkinter.messagebox as confirmDialog
 import tkinter.ttk as ttk
 import traceback
 import urllib.parse
@@ -19,57 +18,36 @@ from time import sleep
 from tkinter import *
 
 import requests  # type: ignore
-from config import appname  # type: ignore
+from config import appname, config, user_agent  # type: ignore
+import timeout_session  # type: ignore
 from monitor import monitor  # type: ignore
+from ttkHyperlinkLabel import HyperlinkLabel  # type: ignore
 from theme import theme  # type: ignore
+
+# Import localization function from load.py
+from load import plugin_tl  # type: ignore
 
 from . import AutoCompleter, PlaceHolder
 from .updater import SpanshUpdater
 from .FleetCarrierManager import FleetCarrierManager
+from .ui_helpers import ThemeSafeCanvas, ThemedCombobox
+from .windows import show_carrier_details_window, show_route_window, refresh_route_window_if_open
+from .ui.message_dialog import showinfo, showwarning, showerror, askyesno
 
 # We need a name of plugin dir, not GalaxyGPS.py dir
 plugin_name = os.path.basename(os.path.dirname(os.path.dirname(__file__)))
 logger = logging.getLogger(f'{appname}.{plugin_name}')
 
 
-class ThemeSafeCanvas(tk.Canvas):
-    """
-    A Canvas widget that gracefully handles unsupported options from EDMC's theme system.
-    Canvas widgets don't support text-related options like -foreground and -font,
-    so we silently ignore them to prevent TclError when EDMC's theme system tries to apply them.
-    """
-    # Options that Canvas widgets don't support but EDMC's theme system may try to apply
-    _unsupported_options = {
-        'foreground', '-foreground', 'fg', '-fg',
-        'font', '-font'
-    }
-    
-    def configure(self, cnf=None, **kw):
-        """Override configure to silently ignore unsupported options."""
-        if cnf is not None:
-            # Handle dict-style configuration
-            if isinstance(cnf, dict):
-                cnf = {k: v for k, v in cnf.items() if k not in self._unsupported_options}
-            elif isinstance(cnf, str):
-                # Handle single option query like 'foreground' or '-foreground'
-                if cnf in self._unsupported_options:
-                    # Return empty string for unsupported option (matching tkinter behavior)
-                    return ''
-        # Remove unsupported options from keyword arguments
-        kw = {k: v for k, v in kw.items() if k not in self._unsupported_options}
-        # Call parent configure with filtered options (only if there are options to configure)
-        if cnf is None and not kw:
-            return super().configure()
-        return super().configure(cnf, **kw)
-    
-    def __setitem__(self, key, value):
-        """Override __setitem__ to silently ignore unsupported options."""
-        if key in self._unsupported_options:
-            # Silently ignore unsupported options
-            return
-        return super().__setitem__(key, value)
-    
-    config = configure  # Alias for configure method
+def _round_distance(val):
+    """Round distance value up to nearest hundredth. Used by Spansh route worker."""
+    if not val or val == "":
+        return ""
+    try:
+        val_float = float(val)
+        return f"{math.ceil(val_float * 100) / 100:.2f}"
+    except (ValueError, TypeError):
+        return str(val) if val is not None else ""
 
 
 class GalaxyGPS():
@@ -87,19 +65,28 @@ class GalaxyGPS():
         self.update_available = False
         # Initialize Fleet Carrier Manager for CAPI integration
         self.fleet_carrier_manager = FleetCarrierManager(plugin_dir)
+        # Initialize cache managers for detailed carrier data
+        from GalaxyGPS.CargoDetailsManager import CargoDetailsManager
+        from GalaxyGPS.StoredShipsManager import StoredShipsManager
+        from GalaxyGPS.StoredModulesManager import StoredModulesManager
+        self.cargo_manager = CargoDetailsManager(plugin_dir)
+        self.ships_manager = StoredShipsManager(plugin_dir)
+        self.modules_manager = StoredModulesManager(plugin_dir)
         self.roadtoriches = False
         self.fleetcarrier = False
         self.galaxy = False
+        self.neutron = False  # Flag for neutron plotter routes with cumulative jumps
         self.next_stop = "No route planned"
         self.route = []
         self.route_full_data = []  # Store full CSV row data to preserve all columns
         self.route_fieldnames = []  # Original CSV fieldnames (preserved for display)
-        self.next_wp_label = "Next waypoint: "
+        # Note: These labels will be refreshed on language change via _refresh_localized_ui
+        self.next_wp_label = plugin_tl("Next waypoint: ")
         self.route_window_ref = None  # Reference to open route window for dynamic updates
-        self.jumpcountlbl_txt = "Estimated jumps left: "
-        self.bodieslbl_txt = "Bodies to scan at: "
-        self.fleetstocklbl_txt = "Warning: Restock Tritium"
-        self.refuellbl_txt = "Time to scoop some fuel"
+        self.jumpcountlbl_txt = plugin_tl("Estimated jumps left: ")
+        self.bodieslbl_txt = plugin_tl("Bodies to scan at: ")
+        self.fleetstocklbl_txt = plugin_tl("Warning: Restock Tritium")
+        self.refuellbl_txt = plugin_tl("Time to scoop some fuel")
         self.bodies = ""
         self.parent = None
         self.plugin_dir = plugin_dir
@@ -110,7 +97,8 @@ class GalaxyGPS():
         self.offset = 0
         self.jumps_left = 0
         self.error_txt = tk.StringVar()
-        self.plot_error = "Error while trying to plot a route, please try again."
+        # LANG: Error message when route plotting fails
+        self.plot_error = plugin_tl("Error while trying to plot a route, please try again.")
         self.system_header = "System Name"
         self.bodyname_header = "Body Name"
         self.bodysubtype_header = "Body Subtype"
@@ -124,6 +112,7 @@ class GalaxyGPS():
         self.dist_remaining = ""
         self.last_dist_next = ""
         self.fuel_used = ""
+        self.fuel_remaining = ""
         self.has_fuel_used = False
         # Supercharge mode (Spansh neutron routing)
         # False = normal supercharge (x4)
@@ -140,6 +129,7 @@ class GalaxyGPS():
         self.selected_carrier_callsign = None
         self.fleet_carrier_var = tk.StringVar()
         self._gui_initialized = False  # Track if GUI has been initialized
+        self._route_queue = queue.Queue()
 
     #   -- GUI part --
     def init_gui(self, parent):
@@ -227,13 +217,15 @@ class GalaxyGPS():
             self.fleet_carrier_combobox = None
             self.fleet_carrier_details_btn = None
             self.fleet_carrier_inara_btn = None
+            self.fleet_carrier_buttons_container = None
             self.fleet_carrier_system_label = None
             self.fleet_carrier_icy_rings_label = None
             self.fleet_carrier_icy_rings_cb = None
             self.fleet_carrier_pristine_label = None
             self.fleet_carrier_pristine_cb = None
             self.fleet_carrier_tritium_label = None
-            self.fleet_carrier_balance_label = None
+            self.fleet_carrier_balance_value = None
+            self.fleet_carrier_tritium_balance_container = None
             self.fleet_carrier_separator = None
             
             # Create frame fresh
@@ -242,88 +234,61 @@ class GalaxyGPS():
             
             # Fleet carrier status display (compact, at top)
             # Create all widgets fresh
-            self.fleet_carrier_status_label = tk.Label(self.frame, text="Fleet Carrier:")
+            # Use container frame for tight spacing (like System display)
+            carrier_container = tk.Frame(self.frame, bg=self.frame.cget('bg'))
+            # LANG: Label for fleet carrier selector
+            self.fleet_carrier_status_label = tk.Label(carrier_container, text=plugin_tl("Fleet Carrier:"))
+            self.fleet_carrier_status_label.pack(side=tk.LEFT)
             
-            # Get frame background color to match EDMC theme
-            frame_bg = self.frame.cget('bg')
-            
-            # Determine background color - use frame background or fallback to dark color
-            # EDMC dark theme typically uses a dark gray/black background
-            if frame_bg and frame_bg.lower() not in ['white', '#ffffff', 'systemwindow', 'systembuttonface']:
-                bg_color = frame_bg
-            else:
-                # Use a dark color that matches EDMC's dark theme
-                bg_color = '#1e1e1e'  # Dark gray/black typical of EDMC dark theme
-            
-            # Create and configure style for the combobox
-            combobox_style = ttk.Style()
-            # Configure the Combobox style to match EDMC dark theme with orange text
-            combobox_style.configure(
-                'FleetCarrier.TCombobox',
-                fieldbackground=bg_color,  # Match EDMC dark theme background
-                background=bg_color,  # Background of the combobox
-                foreground='orange',  # Orange text to match rest of program
-                borderwidth=1,
-                relief='solid',
-                arrowcolor='orange',  # Orange dropdown arrow
-                selectbackground=bg_color,  # Background when item is selected
-                selectforeground='orange'  # Text color when item is selected
-            )
-            # Configure the dropdown arrow button and readonly state
-            combobox_style.map(
-                'FleetCarrier.TCombobox',
-                fieldbackground=[('readonly', bg_color), ('!readonly', bg_color)],
-                background=[('readonly', bg_color), ('!readonly', bg_color)],
-                foreground=[('readonly', 'orange'), ('!readonly', 'orange')],
-                arrowcolor=[('readonly', 'orange'), ('!readonly', 'orange')],
-                selectbackground=[('readonly', bg_color), ('!readonly', bg_color)],
-                selectforeground=[('readonly', 'orange'), ('!readonly', 'orange')]
-            )
-            
-            self.fleet_carrier_combobox = ttk.Combobox(
-                self.frame, 
+            # Create custom themed combobox (replaces ttk.Combobox for full theme control)
+            self.fleet_carrier_combobox = ThemedCombobox(
+                carrier_container, 
                 textvariable=self.fleet_carrier_var,
-                state="readonly",
-                width=25,
-                style='FleetCarrier.TCombobox'
+                state="readonly"
             )
+            self.fleet_carrier_combobox.pack(side=tk.LEFT, padx=(2, 0))
             self.fleet_carrier_combobox.bind("<<ComboboxSelected>>", self.on_carrier_selected)
             
-            # Style the dropdown listbox popup window when it opens
-            # This is done by binding to the combobox's postcommand to style the popup
-            def style_dropdown():
-                """Style the combobox dropdown list when it opens"""
-                try:
-                    # Use a small delay to ensure the popup window is created
-                    self.parent.after(50, lambda: self._style_combobox_popup(bg_color))
-                except:
-                    pass  # Silently fail if styling can't be applied
-            
-            # Bind to postcommand to style the dropdown list when it opens
-            original_postcommand = self.fleet_carrier_combobox.cget('postcommand') if self.fleet_carrier_combobox.cget('postcommand') else None
-            def combined_postcommand():
-                if original_postcommand:
-                    original_postcommand()
-                style_dropdown()
-            self.fleet_carrier_combobox.configure(postcommand=combined_postcommand)
+            # Create container for View All and Inara buttons
+            buttons_container = tk.Frame(self.frame, bg=self.frame.cget('bg'))
             self.fleet_carrier_details_btn = tk.Button(
-                self.frame, 
-                text="View All", 
-                command=self.show_carrier_details_window,
-                width=7
+                buttons_container, 
+                text=plugin_tl("View All"),  # LANG: Button to view all fleet carriers
+                command=self.show_carrier_details_window
             )
+            self.fleet_carrier_details_btn.pack(side=tk.LEFT, padx=(0, 2))
             self.fleet_carrier_inara_btn = tk.Button(
-                self.frame,
-                text="Inara",
+                buttons_container,
+                text=plugin_tl("Inara"),  # LANG: Button to open Inara website
                 command=self.open_selected_carrier_inara,
                 width=6,
                 fg="blue",
                 cursor="hand2",
                 state=tk.DISABLED
             )
-            self.fleet_carrier_system_label = tk.Label(self.frame, text="System:", foreground="gray")
-            # Icy Rings and Pristine status - circular toggle buttons (radio-button style)
-            # Create a container frame to hold both toggles side-by-side
+            self.fleet_carrier_inara_btn.pack(side=tk.LEFT)
+            # Store container reference
+            self.fleet_carrier_buttons_container = buttons_container
+            
+            # Fleet Carrier System display - styled like EDMC's main system display
+            # Orange "System:" label + clickable white system name with context menu
+            # Use a container frame to pack them tightly side-by-side
+            system_container = tk.Frame(self.frame, bg=self.frame.cget('bg'))
+            # LANG: Label for fleet carrier system display
+            self.fleet_carrier_system_label = tk.Label(system_container, text=plugin_tl("System:"))
+            self.fleet_carrier_system_label.pack(side=tk.LEFT)
+            self.fleet_carrier_system_name = HyperlinkLabel(
+                system_container,
+                compound=tk.RIGHT,
+                url=self.fleet_carrier_system_url,
+                popup_copy=True,
+                text="",
+                name='system'  # Must be 'system' for full context menu (EDSM, Inara, Spansh)
+            )
+            self.fleet_carrier_system_name.pack(side=tk.LEFT, padx=(2, 0))
+            
+            # Create container for Icy Rings and Pristine status - circular toggle buttons (radio-button style)
+            # This will be gridded separately between system and tritium
             frame_bg = self.frame.cget('bg')
             rings_pristine_container = tk.Frame(self.frame, bg=frame_bg)
             
@@ -340,9 +305,10 @@ class GalaxyGPS():
             )
             self.fleet_carrier_icy_rings_canvas.pack(side=tk.LEFT, padx=(0, 2))
             # No click binding - read-only display
+            # LANG: Label for icy rings status
             self.fleet_carrier_icy_rings_label = tk.Label(
                 icy_rings_frame,
-                text="Icy Rings",
+                text=plugin_tl("Icy Rings"),
                 foreground="gray",
                 bg=frame_bg
             )
@@ -361,9 +327,10 @@ class GalaxyGPS():
             )
             self.fleet_carrier_pristine_canvas.pack(side=tk.LEFT, padx=(2, 0))  # Small left padding to separate from Icy Rings
             # No click binding - read-only display
+            # LANG: Label for pristine ring status
             self.fleet_carrier_pristine_label = tk.Label(
                 pristine_frame,
-                text="Pristine",
+                text=plugin_tl("Pristine"),
                 foreground="gray",
                 bg=frame_bg
             )
@@ -374,36 +341,65 @@ class GalaxyGPS():
             self.fleet_carrier_icy_rings_cb = icy_rings_frame
             self.fleet_carrier_pristine_cb = pristine_frame
             self.fleet_carrier_rings_pristine_container = rings_pristine_container
+            
+            # Create container for Tritium and Balance
+            tritium_balance_container = tk.Frame(self.frame, bg=self.frame.cget('bg'))
             self.fleet_carrier_tritium_label = tk.Label(
-                self.frame, 
+                tritium_balance_container, 
                 text="Tritium:", 
                 foreground="blue", 
-                cursor="hand2"
+                cursor="hand2",
+                underline=-1
             )
-            self.fleet_carrier_balance_label = tk.Label(self.frame, text="Balance:", foreground="gray")
+            self.fleet_carrier_tritium_label.pack(side=tk.LEFT)
+            
+            # Balance label and value in separate labels for color control
+            # LANG: Label for fleet carrier balance
+            self.fleet_carrier_balance_label = tk.Label(tritium_balance_container, text=plugin_tl("Balance:"))
+            self.fleet_carrier_balance_label.pack(side=tk.LEFT, padx=(10, 2))
+            self.fleet_carrier_balance_value = tk.Label(tritium_balance_container, text="", foreground="green")
+            self.fleet_carrier_balance_value.pack(side=tk.LEFT)
+            
+            # Store container reference
+            self.fleet_carrier_tritium_balance_container = tritium_balance_container
 
-            # Route info - make waypoint button more compact
-            self.waypoint_prev_btn = tk.Button(self.frame, text="^", command=self.goto_prev_waypoint, width=3)
-            self.waypoint_btn = tk.Button(self.frame, text=self.next_wp_label + '\n' + self.next_stop, command=self.copy_waypoint, width=20)
-            self.waypoint_next_btn = tk.Button(self.frame, text="v", command=self.goto_next_waypoint, width=3)
+            # Route info - make waypoint button more compact with minimal internal padding
+            self.waypoint_prev_btn = tk.Button(self.frame, text="↑", command=self.goto_prev_waypoint, width=3, font=("Arial", 12, "bold"), padx=0, pady=0)
+            self.waypoint_btn = tk.Button(self.frame, text=self.next_wp_label + '\n' + self.next_stop, command=self.copy_waypoint, width=20, padx=2, pady=2)
+            self.waypoint_next_btn = tk.Button(self.frame, text="↓", command=self.goto_next_waypoint, width=3, font=("Arial", 12, "bold"), padx=0, pady=0)
             self.jumpcounttxt_lbl = tk.Label(self.frame, text=self.jumpcountlbl_txt + str(self.jumps_left))
             self.dist_prev_lbl = tk.Label(self.frame, text="")
             self.dist_next_lbl = tk.Label(self.frame, text="")
-            self.fuel_used_lbl = tk.Label(self.frame, text="")
+            # Create a container frame for fuel labels to display them side by side
+            self.fuel_labels_frame = tk.Frame(self.frame)
+            self.fuel_used_lbl = tk.Label(self.fuel_labels_frame, text="")
+            self.fuel_remaining_lbl = tk.Label(self.fuel_labels_frame, text="")
             self.dist_remaining_lbl = tk.Label(self.frame, text="")
             self.bodies_lbl = tk.Label(self.frame, justify=LEFT, text=self.bodieslbl_txt + self.bodies)
             self.fleetrestock_lbl = tk.Label(self.frame, justify=tk.CENTER, text=self.fleetstocklbl_txt, fg="red")
-            self.find_trit_btn = tk.Button(self.frame, text="Find Trit", command=self.find_tritium_on_inara, width=10)
+            self.find_trit_btn = tk.Button(self.frame, text=plugin_tl("Find Trit"), command=self.find_tritium_on_inara)  # LANG: Button to find tritium on Inara
             self.refuel_lbl = tk.Label(self.frame, justify=tk.CENTER, text=self.refuellbl_txt, fg="red")
             self.error_lbl = tk.Label(self.frame, textvariable=self.error_txt)
 
             # Plotting GUI
-            self.source_ac = AutoCompleter(self.frame, "Source System", width=30)
-            self.dest_ac = AutoCompleter(self.frame, "Destination System", width=30)
-            self.range_entry = PlaceHolder(self.frame, "Range (LY)", width=8)
+            # LANG: Placeholder text for source system input
+            self.source_ac = AutoCompleter(self.frame, plugin_tl("Source System"), width=30)
+            # LANG: Placeholder text for destination system input
+            self.dest_ac = AutoCompleter(self.frame, plugin_tl("Destination System"), width=30)
+            
+            # Create container frame for range entry and supercharge toggle (side-by-side)
+            range_supercharge_container = tk.Frame(self.frame, bg=self.frame.cget('bg'))
+            
+            # LANG: Placeholder text for jump range input
+            # Calculate width based on placeholder text length (add 2 chars padding)
+            range_placeholder = plugin_tl("Range (LY)")
+            range_width = max(8, len(range_placeholder) + 2)  # Minimum 8, or text length + padding
+            self.range_entry = PlaceHolder(range_supercharge_container, range_placeholder, width=range_width)
+            self.range_entry.pack(side=tk.LEFT, padx=(0, 10))
+            
             # Supercharge toggle button - circular radio-button style that toggles like a checkbox
             # Create a frame to hold the toggle button and label
-            supercharge_frame = tk.Frame(self.frame, bg=self.frame.cget('bg'))
+            supercharge_frame = tk.Frame(range_supercharge_container, bg=self.frame.cget('bg'))
             # Create a custom toggle button using a canvas to draw a circle
             frame_bg = self.frame.cget('bg')
             self.supercharge_toggle_canvas = ThemeSafeCanvas(
@@ -420,9 +416,10 @@ class GalaxyGPS():
             self.supercharge_toggle_canvas.bind("<Button-1>", self._toggle_supercharge)
             
             # Create label for the text - match font size of Plot Route button (default button font)
+            # LANG: Label for neutron star supercharge toggle
             self.supercharge_label = tk.Label(
                 supercharge_frame,
-                text="Supercharge",
+                text=plugin_tl("Supercharge"),
                 foreground="orange",
                 bg=frame_bg,
                 cursor="hand2"
@@ -430,8 +427,11 @@ class GalaxyGPS():
             self.supercharge_label.pack(side=tk.LEFT)
             self.supercharge_label.bind("<Button-1>", self._toggle_supercharge)
             
-            # Store reference to the frame for grid positioning
-            self.supercharge_cb = supercharge_frame
+            # Pack supercharge frame into container
+            supercharge_frame.pack(side=tk.LEFT)
+            
+            # Store reference to the container frame for grid positioning
+            self.supercharge_cb = range_supercharge_container
             
             # Draw the initial circles (unchecked state) - do this after all setup
             # Use after_idle to ensure canvas is ready
@@ -439,45 +439,59 @@ class GalaxyGPS():
             self.frame.after_idle(self._draw_icy_rings_toggle)
             self.frame.after_idle(self._draw_pristine_toggle)
 
-            self.efficiency_slider = tk.Scale(self.frame, from_=1, to=100, orient=tk.HORIZONTAL, label="Efficiency (%)")
+            # LANG: Label for efficiency slider
+            self.efficiency_slider = tk.Scale(self.frame, from_=1, to=100, orient=tk.HORIZONTAL, label=plugin_tl("Efficiency (%)"), foreground="orange", sliderrelief=tk.FLAT, bd=0, highlightthickness=0, troughcolor="red")
             self.efficiency_slider.set(60)
-            self.plot_gui_btn = tk.Button(self.frame, text="Plot route", command=self.show_plot_gui, width=10)
-            self.plot_route_btn = tk.Button(self.frame, text="Calculate", command=self.plot_route, width=10)
-            self.cancel_plot = tk.Button(self.frame, text="Cancel", command=lambda: self.show_plot_gui(False), width=10)
-
-            self.csv_route_btn = tk.Button(self.frame, text="Import file", command=self.plot_file, width=10)
-            self.view_route_btn = tk.Button(self.frame, text="View Route", command=self.show_route_window, width=10)
-            self.clear_route_btn = tk.Button(self.frame, text="Clear route", command=self.clear_route, width=10)
+            
+            # Create container for basic controls first
+            self.basic_controls_container = tk.Frame(self.frame)
+            
+            # Create buttons as children of the container for tight packing
+            # LANG: Button to import route from CSV file
+            self.csv_route_btn = tk.Button(self.basic_controls_container, text=plugin_tl("Import file"), command=self.plot_file)
+            # LANG: Button to view current route
+            self.view_route_btn = tk.Button(self.basic_controls_container, text=plugin_tl("View Route"), command=self.show_route_window)
+            # LANG: Button to show route plotting GUI
+            self.plot_gui_btn = tk.Button(self.basic_controls_container, text=plugin_tl("Plot route"), command=self.show_plot_gui)
+            
+            # Create container for plotting controls (Calculate, Cancel)
+            self.plotting_controls_container = tk.Frame(self.frame)
+            
+            # Plotting controls as children of their container
+            # LANG: Button to calculate/compute route
+            self.plot_route_btn = tk.Button(self.plotting_controls_container, text=plugin_tl("Calculate"), command=self.plot_route)
+            # LANG: Button to cancel route plotting
+            self.cancel_plot = tk.Button(self.plotting_controls_container, text=plugin_tl("Cancel"), command=lambda: self.show_plot_gui(False))
+            
+            # Clear route button remains a child of self.frame
+            # LANG: Button to clear current route
+            self.clear_route_btn = tk.Button(self.frame, text=plugin_tl("Clear route"), command=self.clear_route)
 
             row = 0
             # Fleet carrier status at the top
             # Store grid positions to prevent accidental repositioning
-            self.fleet_carrier_status_label.grid(row=row, column=0, padx=2, pady=2, sticky=tk.W)
-            self.fleet_carrier_combobox.grid(row=row, column=1, padx=0, pady=2, sticky=tk.W)  # No left padding to close gap
+            carrier_container.grid(row=row, column=0, columnspan=2, padx=2, pady=2, sticky=tk.W)
             # Store grid info to prevent repositioning
             self._fleet_carrier_row_start = row
             self.update_fleet_carrier_dropdown()
             row += 1
-            # View All and Inara buttons on row below Fleet Carrier
-            self.fleet_carrier_details_btn.grid(row=row, column=0, padx=2, pady=2, sticky=tk.W)
-            self.fleet_carrier_inara_btn.grid(row=row, column=1, padx=2, pady=2, sticky=tk.W)
+            # View All and Inara buttons packed together in column 0
+            self.fleet_carrier_buttons_container.grid(row=row, column=0, padx=2, pady=2, sticky=tk.W)
             row += 1
-            # Fleet carrier system location with Icy Rings and Pristine to the right
-            self.fleet_carrier_system_label.grid(row=row, column=0, padx=2, pady=2, sticky=tk.W)
-            # Fleet carrier Icy Rings and Pristine status - to the right of System, directly next to each other
-            # Use the container frame that has both toggles packed side-by-side
-            self.fleet_carrier_rings_pristine_container.grid(row=row, column=1, padx=2, pady=2, sticky=tk.W)
+            # Fleet carrier system location
+            system_container.grid(row=row, column=0, columnspan=2, padx=2, pady=2, sticky=tk.W)
             self.update_fleet_carrier_system_display()
+            row += 1
+            # Icy Rings and Pristine status on their own row
+            self.fleet_carrier_rings_pristine_container.grid(row=row, column=0, columnspan=2, padx=2, pady=2, sticky=tk.W)
             self.update_fleet_carrier_rings_status()
             row += 1
-            # Fleet carrier Tritium display (clickable to search Inara) with Balance to the right
-            self.fleet_carrier_tritium_label.grid(row=row, column=0, padx=2, pady=2, sticky=tk.W)
+            # Fleet carrier Tritium display (clickable to search Inara) with Balance packed next to it
+            self.fleet_carrier_tritium_balance_container.grid(row=row, column=0, columnspan=2, padx=2, pady=2, sticky=tk.W)
             # Bind click and hover events - handlers will check if data is available
             self.fleet_carrier_tritium_label.bind("<Button-1>", lambda e: self._on_tritium_click())
             self.fleet_carrier_tritium_label.bind("<Enter>", lambda e: self._on_tritium_enter())
             self.fleet_carrier_tritium_label.bind("<Leave>", lambda e: self._on_tritium_leave())
-            # Fleet carrier Balance display - to the right of Tritium
-            self.fleet_carrier_balance_label.grid(row=row, column=1, padx=2, pady=2, sticky=tk.W)
             self.update_fleet_carrier_tritium_display()
             self.update_fleet_carrier_balance_display()
             row += 1
@@ -486,17 +500,25 @@ class GalaxyGPS():
             self.fleet_carrier_separator.grid(row=row, column=0, columnspan=4, sticky=tk.EW, padx=2, pady=2)
             self._fleet_carrier_row_end = row  # Store end row for fleet carrier section
             row += 1
-            # Route waypoint controls - buttons in column 0, distances in column 1
-            self.waypoint_prev_btn.grid(row=row, column=0, padx=2, pady=5, sticky=tk.W)
-            self.dist_remaining_lbl.grid(row=row, column=1, padx=2, pady=5, sticky=tk.W)
+            # Route waypoint controls - buttons in column 0
+            # All buttons natural size (no sticky) - column width determined by widest button
+            # Buttons will auto-center in the column
+            # No horizontal padding for tight spacing between columns
+            self.waypoint_prev_btn.grid(row=row, column=0, padx=0, pady=5)
             row += 1
-            self.waypoint_btn.grid(row=row, column=0, padx=2, pady=5, sticky=tk.W)
-            self.dist_prev_lbl.grid(row=row, column=1, padx=2, pady=5, sticky=tk.W)
+            self.waypoint_btn.grid(row=row, column=0, padx=0, pady=5)
             row += 1
-            self.waypoint_next_btn.grid(row=row, column=0, padx=2, pady=5, sticky=tk.W)
-            self.dist_next_lbl.grid(row=row, column=1, padx=2, pady=5, sticky=tk.W)
+            self.waypoint_next_btn.grid(row=row, column=0, padx=0, pady=5)
             row += 1
-            self.fuel_used_lbl.grid(row=row, column=1, padx=2, pady=2, sticky=tk.W)
+            # Info labels in their own rows after the buttons
+            # Swapped: dist_prev (Number of Jumps) now appears before dist_remaining (Remaining jumps afterwards)
+            self.dist_prev_lbl.grid(row=row, column=0, columnspan=2, padx=0, pady=2, sticky=tk.W)
+            row += 1
+            self.dist_remaining_lbl.grid(row=row, column=0, columnspan=2, padx=0, pady=2, sticky=tk.W)
+            row += 1
+            self.dist_next_lbl.grid(row=row, column=0, columnspan=2, padx=0, pady=2, sticky=tk.W)
+            row += 1
+            self.fuel_labels_frame.grid(row=row, column=0, columnspan=2, padx=0, pady=2, sticky=tk.W)
             row += 1
             self.bodies_lbl.grid(row=row, columnspan=4, padx=2, sticky=tk.W)
             row += 1
@@ -512,27 +534,32 @@ class GalaxyGPS():
             row += 2
             self.dest_ac.grid(row=row, columnspan=4, padx=2, pady=(5,0))
             row += 2
-            self.range_entry.grid(row=row, column=0, padx=2, pady=5, sticky=tk.W)
-            self.supercharge_cb.grid(row=row, column=1, padx=2, pady=5, sticky=tk.W)
+            self.supercharge_cb.grid(row=row, column=0, padx=2, pady=5, sticky=tk.W)
             row += 1
-            self.efficiency_slider.grid(row=row, padx=2, pady=5, columnspan=3, sticky=tk.EW)
+            self.efficiency_slider.grid(row=row, padx=2, pady=(0, 5), columnspan=3, sticky=tk.EW)
+            # Configure columns to allow slider to expand with window width
+            # Column 0 has weight=0 to auto-size to range_entry, columns 1 and 2 expand
+            self.frame.grid_columnconfigure(0, weight=0)
+            self.frame.grid_columnconfigure(1, weight=1)
+            self.frame.grid_columnconfigure(2, weight=1)
             row += 1
-            # Basic controls - always visible, side by side in separate columns, tighter spacing
-            # These will be shown/hidden by _update_widget_visibility
-            self.csv_route_btn.grid(row=row, column=0, padx=(2, 1), pady=5, sticky=tk.W)
-            self.view_route_btn.grid(row=row, column=1, padx=1, pady=5, sticky=tk.W)
-            self.plot_gui_btn.grid(row=row, column=2, padx=1, pady=5, sticky=tk.W)
-            # Plotting controls - shown/hidden based on state (same row, same columns)
-            # When plotting is active, these replace the basic controls
-            self.plot_route_btn.grid(row=row, column=0, padx=(2, 1), pady=5, sticky=tk.W)
-            self.cancel_plot.grid(row=row, column=1, padx=1, pady=5, sticky=tk.W)
-            # Initially hide plotting controls (they'll be shown when plotting state is active)
-            self.plot_route_btn.grid_remove()
-            self.cancel_plot.grid_remove()
+            
+            # Pack buttons inside their container
+            self.csv_route_btn.pack(side=tk.LEFT, padx=(0, 2))
+            self.view_route_btn.pack(side=tk.LEFT, padx=(0, 2))
+            self.plot_gui_btn.pack(side=tk.LEFT)
+            # Grid the basic controls container into the main frame
+            self.basic_controls_container.grid(row=row, column=0, padx=2, pady=5, sticky=tk.W)
+            
+            # Pack plotting buttons inside their container
+            self.plot_route_btn.pack(side=tk.LEFT, padx=(0, 2))
+            self.cancel_plot.pack(side=tk.LEFT)
+            # Grid the plotting controls container into the main frame (same row)
+            self.plotting_controls_container.grid(row=row, column=0, padx=2, pady=5, sticky=tk.W)
+            # Initially hide plotting controls container (they'll be shown when plotting state is active)
+            self.plotting_controls_container.grid_remove()
             row += 1
             self.clear_route_btn.grid(row=row, column=0, padx=(2, 1), pady=5, sticky=tk.W)
-            row += 1
-            self.jumpcounttxt_lbl.grid(row=row, padx=2, pady=5, sticky=tk.W)
             row += 1
             self.error_lbl.grid(row=row, columnspan=4, padx=2)
             self.error_lbl.grid_remove()
@@ -550,6 +577,87 @@ class GalaxyGPS():
             # Apply EDMC theme to the main frame and all widgets
             theme.update(self.frame)
             
+            # Now style the combobox with theme-aware colors (after theme.update() has been applied)
+            # Get frame background color AFTER theme.update() to get the correct theme color
+            frame_bg = self.frame.cget('bg')
+            
+            # Convert named system colors to actual color values for ttk.Style
+            # ttk.Style may not accept 'systemwindow' directly, so we need to get the actual color
+            def get_actual_color(color_name):
+                """Convert a named system color to its actual RGB hex value"""
+                try:
+                    # Create a temporary widget to get the actual color value
+                    temp_widget = tk.Label(self.frame, bg=color_name)
+                    temp_widget.update_idletasks()
+                    actual_color = temp_widget.cget('bg')
+                    temp_widget.destroy()
+                    return actual_color
+                except:
+                    return color_name  # Fallback to original if conversion fails
+            
+            # Determine background color based on theme
+            try:
+                from config import config  # type: ignore
+                current_theme = config.get_int('theme')
+                # Theme 0 = default (light), 1 = dark, 2 = transparent (dark)
+                if current_theme in [1, 2]:
+                    # Dark or transparent theme
+                    if frame_bg and frame_bg.strip():
+                        # For transparent theme (2), 'systemwindow' is a valid background color
+                        if current_theme == 2 and frame_bg.lower() == 'systemwindow':
+                            # Convert 'systemwindow' to actual color for ttk.Style
+                            bg_color = get_actual_color('systemwindow')
+                        elif frame_bg.lower() not in ['white', '#ffffff', 'systembuttonface']:
+                            # If it's already a hex color, use it directly
+                            if frame_bg.startswith('#'):
+                                bg_color = frame_bg
+                            else:
+                                # Convert named color to actual value
+                                bg_color = get_actual_color(frame_bg)
+                        else:
+                            bg_color = '#1e1e1e'  # Fallback for dark theme
+                    else:
+                        bg_color = '#1e1e1e'  # Dark gray/black typical of EDMC dark theme
+                else:
+                    # Light/default theme
+                    if frame_bg and frame_bg.strip() and frame_bg.lower() not in ['black', '#000000', '#1e1e1e', 'systemwindow']:
+                        if frame_bg.startswith('#'):
+                            bg_color = frame_bg
+                        else:
+                            bg_color = get_actual_color(frame_bg)
+                    else:
+                        bg_color = '#ffffff'  # White for light theme
+            except:
+                # Fallback: detect from background color
+                if frame_bg and frame_bg.strip():
+                    if frame_bg.lower() == 'systemwindow':
+                        bg_color = get_actual_color('systemwindow')
+                    elif frame_bg.startswith('#'):
+                        bg_color = frame_bg
+                    elif frame_bg.lower() not in ['white', '#ffffff', 'systembuttonface']:
+                        bg_color = get_actual_color(frame_bg)
+                    else:
+                        bg_color = '#1e1e1e'  # Default to dark
+                else:
+                    bg_color = '#1e1e1e'  # Default to dark
+            
+            # Style the custom combobox using its built-in theme styling method
+            try:
+                self.fleet_carrier_combobox.apply_theme_styling()
+            except Exception as e:
+                logger.debug(f'[init_gui] Error applying theme styling to combobox: {e}')
+
+            try:
+                theme.update(self.efficiency_slider)
+            except Exception as e:
+                logger.debug(f'[init_gui] Error applying theme styling to efficiency slider: {e}')
+            
+            # Apply initial theme-aware colors to labels
+            try:
+                self._update_combobox_theme()
+            except Exception as e:
+                logger.debug(f'[init_gui] Error applying initial theme colors: {e}')
+            
             return self.frame
         except Exception as e:
             logger.error(f"Error in init_gui: {traceback.format_exc()}")
@@ -564,6 +672,154 @@ class GalaxyGPS():
             except Exception:
                 # Last resort - return None and let EDMC handle it
                 return None
+    
+    def _update_combobox_theme(self):
+        """
+        Update the fleet carrier combobox and orange label colors when EDMC theme changes.
+        Called by prefs_changed() in load.py.
+        """
+        # Update combobox
+        if hasattr(self, 'fleet_carrier_combobox'):
+            try:
+                self.fleet_carrier_combobox.apply_theme_styling()
+                logger.debug('[_update_combobox_theme] Successfully updated combobox theme')
+            except Exception as e:
+                logger.debug(f'[_update_combobox_theme] Error applying theme to combobox: {e}')
+        
+        # Update orange labels to be theme-aware
+        try:
+            from config import config  # type: ignore
+            current_theme = config.get_int('theme')
+            # Theme 0 = default (light), 1 = dark, 2 = transparent (dark)
+            label_color = "black" if current_theme == 0 else "orange"
+            
+            # Update all orange labels
+            labels_to_update = []
+            
+            if hasattr(self, 'fleet_carrier_icy_rings_label'):
+                labels_to_update.append(self.fleet_carrier_icy_rings_label)
+            if hasattr(self, 'fleet_carrier_pristine_label'):
+                labels_to_update.append(self.fleet_carrier_pristine_label)
+            if hasattr(self, 'supercharge_label'):
+                labels_to_update.append(self.supercharge_label)
+            if hasattr(self, 'efficiency_slider'):
+                labels_to_update.append(self.efficiency_slider)
+            if hasattr(self, 'source_ac') and hasattr(self.source_ac, 'label'):
+                labels_to_update.append(self.source_ac.label)
+            
+            for label in labels_to_update:
+                try:
+                    label.config(foreground=label_color)
+                except Exception as e:
+                    logger.debug(f'[_update_combobox_theme] Error updating label color: {e}')
+            
+            # Redraw toggles to update their label colors
+            try:
+                self._draw_icy_rings_toggle()
+                self._draw_pristine_toggle()
+            except Exception as e:
+                logger.debug(f'[_update_combobox_theme] Error redrawing toggles: {e}')
+            
+            # Update AutoCompleter text boxes to use correct text color
+            try:
+                if hasattr(self, 'source_ac'):
+                    self.source_ac.set_default_style()
+                if hasattr(self, 'dest_ac'):
+                    self.dest_ac.set_default_style()
+            except Exception as e:
+                logger.debug(f'[_update_combobox_theme] Error updating AutoCompleter colors: {e}')
+            
+            logger.debug(f'[_update_combobox_theme] Updated label colors to {label_color} for theme {current_theme}')
+        except Exception as e:
+            logger.debug(f'[_update_combobox_theme] Error updating label colors: {e}')
+    
+    def _refresh_localized_ui(self):
+        """
+        Refresh all localized UI strings when language changes.
+        Called by prefs_changed() in load.py.
+        """
+        try:
+            # Refresh button labels
+            if hasattr(self, 'fleet_carrier_details_btn'):
+                self.fleet_carrier_details_btn.config(text=plugin_tl("View All"))
+            if hasattr(self, 'fleet_carrier_inara_btn'):
+                self.fleet_carrier_inara_btn.config(text=plugin_tl("Inara"))
+            if hasattr(self, 'find_trit_btn'):
+                self.find_trit_btn.config(text=plugin_tl("Find Trit"))
+            if hasattr(self, 'csv_route_btn'):
+                self.csv_route_btn.config(text=plugin_tl("Import file"))
+            if hasattr(self, 'view_route_btn'):
+                self.view_route_btn.config(text=plugin_tl("View Route"))
+            if hasattr(self, 'plot_gui_btn'):
+                self.plot_gui_btn.config(text=plugin_tl("Plot route"))
+            if hasattr(self, 'plot_route_btn'):
+                self.plot_route_btn.config(text=plugin_tl("Calculate"))
+            if hasattr(self, 'cancel_plot'):
+                self.cancel_plot.config(text=plugin_tl("Cancel"))
+            if hasattr(self, 'clear_route_btn'):
+                self.clear_route_btn.config(text=plugin_tl("Clear route"))
+            
+            # Refresh main UI labels
+            if hasattr(self, 'fleet_carrier_status_label'):
+                self.fleet_carrier_status_label.config(text=plugin_tl("Fleet Carrier:"))
+            if hasattr(self, 'fleet_carrier_system_label'):
+                self.fleet_carrier_system_label.config(text=plugin_tl("System:"))
+            if hasattr(self, 'fleet_carrier_balance_label'):
+                self.fleet_carrier_balance_label.config(text=plugin_tl("Balance:"))
+            if hasattr(self, 'fleet_carrier_icy_rings_label'):
+                self.fleet_carrier_icy_rings_label.config(text=plugin_tl("Icy Rings"))
+            if hasattr(self, 'fleet_carrier_pristine_label'):
+                self.fleet_carrier_pristine_label.config(text=plugin_tl("Pristine"))
+            if hasattr(self, 'supercharge_label'):
+                self.supercharge_label.config(text=plugin_tl("Supercharge"))
+            
+            # Refresh slider label
+            if hasattr(self, 'efficiency_slider'):
+                self.efficiency_slider.config(label=plugin_tl("Efficiency (%)"))
+            
+            # Refresh placeholder text for AutoCompleter and PlaceHolder widgets
+            if hasattr(self, 'source_ac'):
+                new_source_placeholder = plugin_tl("Source System")
+                old_placeholder = self.source_ac.placeholder
+                self.source_ac.placeholder = new_source_placeholder
+                # If currently showing placeholder text, update it
+                if self.source_ac.get() == old_placeholder:
+                    self.source_ac.put_placeholder()
+            
+            if hasattr(self, 'dest_ac'):
+                new_dest_placeholder = plugin_tl("Destination System")
+                old_placeholder = self.dest_ac.placeholder
+                self.dest_ac.placeholder = new_dest_placeholder
+                # If currently showing placeholder text, update it
+                if self.dest_ac.get() == old_placeholder:
+                    self.dest_ac.put_placeholder()
+            
+            if hasattr(self, 'range_entry'):
+                new_range_placeholder = plugin_tl("Range (LY)")
+                old_placeholder = self.range_entry.placeholder
+                self.range_entry.placeholder = new_range_placeholder
+                # If currently showing placeholder text, update it
+                if self.range_entry.get() == old_placeholder:
+                    self.range_entry.put_placeholder()
+                # Update width to accommodate translated text
+                range_width = max(8, len(new_range_placeholder) + 2)
+                self.range_entry.config(width=range_width)
+            
+            # Refresh dynamic route label text (used in compute_distances)
+            self.next_wp_label = plugin_tl("Next waypoint: ")
+            self.jumpcountlbl_txt = plugin_tl("Estimated jumps left: ")
+            self.bodieslbl_txt = plugin_tl("Bodies to scan at: ")
+            self.fleetstocklbl_txt = plugin_tl("Warning: Restock Tritium")
+            self.refuellbl_txt = plugin_tl("Time to scoop some fuel")
+            self.plot_error = plugin_tl("Error while trying to plot a route, please try again.")
+            
+            # If route is loaded, recalculate distances to update displayed labels
+            if hasattr(self, 'route') and self.route:
+                self.compute_distances()
+            
+            logger.debug('[_refresh_localized_ui] Refreshed UI strings for language change')
+        except Exception as e:
+            logger.debug(f'[_refresh_localized_ui] Error refreshing localized UI: {e}')
     
     def _draw_supercharge_toggle(self):
         """
@@ -640,27 +896,32 @@ class GalaxyGPS():
                 bg_color = "white"
             
             # Draw outer circle (always visible)
-            # Use orange outline when checked, gray when unchecked
-            outline_color = "orange" if is_checked else "gray"
+            # Use theme-aware color when checked, gray when unchecked
+            from config import config  # type: ignore
+            current_theme = config.get_int('theme')
+            active_color = "black" if current_theme == 0 else "orange"
+            
+            outline_color = active_color if is_checked else "gray"
             self.fleet_carrier_icy_rings_canvas.create_oval(
                 2, 2, 18, 18,
                 outline=outline_color,
                 width=2,
-                fill=bg_color if not is_checked else "orange"
+                fill=bg_color if not is_checked else active_color
             )
             
-            # If checked, draw inner filled circle in orange
+            # If checked, draw inner filled circle
             if is_checked:
+                inner_color = "darkgray" if current_theme == 0 else "darkorange"
                 self.fleet_carrier_icy_rings_canvas.create_oval(
                     6, 6, 14, 14,
-                    outline="darkorange",
-                    fill="orange",
+                    outline=inner_color,
+                    fill=active_color,
                     width=1
                 )
             
-            # Update label color: orange when checked, gray when unchecked
+            # Update label color: active color when checked, gray when unchecked
             if hasattr(self, 'fleet_carrier_icy_rings_label'):
-                label_color = "orange" if is_checked else "gray"
+                label_color = active_color if is_checked else "gray"
                 self.fleet_carrier_icy_rings_label.config(foreground=label_color)
         except Exception:
             pass
@@ -688,27 +949,32 @@ class GalaxyGPS():
                 bg_color = "white"
             
             # Draw outer circle (always visible)
-            # Use orange outline when checked, gray when unchecked
-            outline_color = "orange" if is_checked else "gray"
+            # Use theme-aware color when checked, gray when unchecked
+            from config import config  # type: ignore
+            current_theme = config.get_int('theme')
+            active_color = "black" if current_theme == 0 else "orange"
+            
+            outline_color = active_color if is_checked else "gray"
             self.fleet_carrier_pristine_canvas.create_oval(
                 2, 2, 18, 18,
                 outline=outline_color,
                 width=2,
-                fill=bg_color if not is_checked else "orange"
+                fill=bg_color if not is_checked else active_color
             )
             
-            # If checked, draw inner filled circle in orange
+            # If checked, draw inner filled circle
             if is_checked:
+                inner_color = "darkgray" if current_theme == 0 else "darkorange"
                 self.fleet_carrier_pristine_canvas.create_oval(
                     6, 6, 14, 14,
-                    outline="darkorange",
-                    fill="orange",
+                    outline=inner_color,
+                    fill=active_color,
                     width=1
                 )
             
-            # Update label color: orange when checked, gray when unchecked
+            # Update label color: active color when checked, gray when unchecked
             if hasattr(self, 'fleet_carrier_pristine_label'):
-                label_color = "orange" if is_checked else "gray"
+                label_color = active_color if is_checked else "gray"
                 self.fleet_carrier_pristine_label.config(foreground=label_color)
         except Exception:
             pass
@@ -756,19 +1022,18 @@ class GalaxyGPS():
         # Define widget groups for each state
         route_widgets = [
             self.waypoint_prev_btn, self.waypoint_btn, self.waypoint_next_btn,
-            self.jumpcounttxt_lbl, self.clear_route_btn,
-            self.dist_prev_lbl, self.dist_next_lbl, self.fuel_used_lbl, self.dist_remaining_lbl
+            self.clear_route_btn,
+            self.dist_prev_lbl, self.dist_next_lbl, self.fuel_labels_frame, self.dist_remaining_lbl
         ]
         
         plotting_widgets = [
-            self.source_ac, self.dest_ac, self.range_entry,
-            self.supercharge_cb, self.efficiency_slider,
-            self.plot_route_btn, self.cancel_plot
+            self.source_ac, self.dest_ac,
+            self.supercharge_cb, self.efficiency_slider
         ]
         
-        basic_controls = [
-            self.csv_route_btn, self.view_route_btn, self.plot_gui_btn
-        ]
+        # Control containers (replaces individual button management)
+        basic_controls_container = [self.basic_controls_container] if hasattr(self, 'basic_controls_container') else []
+        plotting_controls_container = [self.plotting_controls_container] if hasattr(self, 'plotting_controls_container') else []
         
         info_labels = [
             self.bodies_lbl, self.fleetrestock_lbl, self.refuel_lbl, self.find_trit_btn
@@ -777,13 +1042,14 @@ class GalaxyGPS():
         # Hide all widgets first (except fleet carrier status and basic controls which are always visible)
         # Fleet carrier widgets should never be hidden or repositioned
         fleet_carrier_widgets = [
-            self.fleet_carrier_status_label, self.fleet_carrier_combobox, 
-            self.fleet_carrier_details_btn, self.fleet_carrier_inara_btn, 
-            self.fleet_carrier_system_label, self.fleet_carrier_icy_rings_label, 
-            self.fleet_carrier_icy_rings_cb, self.fleet_carrier_pristine_label, 
-            self.fleet_carrier_pristine_cb, self.fleet_carrier_tritium_label, 
-            self.fleet_carrier_balance_label
+            self.fleet_carrier_status_label, self.fleet_carrier_combobox
         ]
+        
+        # Add containers that hold multiple widgets
+        if hasattr(self, 'fleet_carrier_buttons_container'):
+            fleet_carrier_widgets.append(self.fleet_carrier_buttons_container)
+        if hasattr(self, 'fleet_carrier_tritium_balance_container'):
+            fleet_carrier_widgets.append(self.fleet_carrier_tritium_balance_container)
         
         # Also include the separator in the always-visible list
         if hasattr(self, 'fleet_carrier_separator'):
@@ -793,18 +1059,20 @@ class GalaxyGPS():
         always_visible = fleet_carrier_widgets
         
         # Hide all widgets first (except fleet carrier widgets which are always visible)
-        for widget in route_widgets + plotting_widgets + info_labels + basic_controls:
+        for widget in route_widgets + plotting_widgets + info_labels + basic_controls_container + plotting_controls_container:
             if widget not in always_visible:
                 widget.grid_remove()
         
         # Show widgets based on state
         if state == 'plotting':
-            # Hide basic controls (Plot route, Import file, View Route)
-            for widget in basic_controls:
+            # Hide basic controls container (Plot route, Import file, View Route)
+            for widget in basic_controls_container:
                 widget.grid_remove()
             
-            # Show plotting interface (Calculate, Cancel, and plotting inputs)
+            # Show plotting interface (inputs + Calculate/Cancel buttons)
             for widget in plotting_widgets:
+                widget.grid()
+            for widget in plotting_controls_container:
                 widget.grid()
             
             # Prefill source if needed
@@ -815,48 +1083,83 @@ class GalaxyGPS():
                 else:
                     self.source_ac.put_placeholder()
         elif state == 'empty':
-            # Hide plotting widgets
+            # Hide plotting widgets and container
             for widget in plotting_widgets:
                 widget.grid_remove()
+            for widget in plotting_controls_container:
+                widget.grid_remove()
             
-            # Show basic controls
-            for widget in basic_controls:
+            # Show basic controls container
+            for widget in basic_controls_container:
                 widget.grid()
         elif state == 'route' and len(self.route) > 0:
-            # Hide plotting widgets
+            # Hide plotting widgets and container
             for widget in plotting_widgets:
                 widget.grid_remove()
+            for widget in plotting_controls_container:
+                widget.grid_remove()
             
-            # Show basic controls
-            for widget in basic_controls:
+            # Show basic controls container
+            for widget in basic_controls_container:
                 widget.grid()
             
             # Show route navigation interface
             for widget in route_widgets:
                 widget.grid()
             
-            # Update waypoint button text
-            self.waypoint_btn["text"] = self.next_wp_label + '\n' + self.next_stop
+            # Update waypoint button text - use config() for more reliable updates
+            if hasattr(self, 'waypoint_btn') and hasattr(self, 'next_stop') and hasattr(self, 'next_wp_label'):
+                try:
+                    button_text = self.next_wp_label + '\n' + (self.next_stop if self.next_stop else "")
+                    self.waypoint_btn.config(text=button_text)
+                    self.waypoint_btn.update_idletasks()
+                except Exception:
+                    pass
             
             # Update distance labels
-            if self.jumps_left > 0:
-                self.jumpcounttxt_lbl["text"] = self.jumpcountlbl_txt + str(self.jumps_left)
-                self.dist_prev_lbl["text"] = self.dist_prev
-                self.dist_next_lbl["text"] = self.dist_next
-                self.dist_remaining_lbl["text"] = self.dist_remaining
-                # Update fuel used display (only if CSV has this column)
-                if self.has_fuel_used and self.fuel_used:
-                    # fuel_used is already rounded and formatted as string from compute_distances()
-                    self.fuel_used_lbl["text"] = f"Fuel Used: {self.fuel_used}"
-                    self.fuel_used_lbl.grid()
-                else:
-                    self.fuel_used_lbl.grid_remove()
-            else:
-                self.jumpcounttxt_lbl.grid_remove()
-                self.dist_prev_lbl.grid_remove()
+            # Update distance labels - always show them when route is loaded
+            self.dist_prev_lbl["text"] = self.dist_prev
+            self.dist_remaining_lbl["text"] = self.dist_remaining
+            
+            # Hide "Next waypoint jumps" for neutron routes (only show for other route types)
+            if self.neutron:
                 self.dist_next_lbl.grid_remove()
-                self.fuel_used_lbl.grid_remove()
-                self.dist_remaining_lbl.grid_remove()
+            else:
+                self.dist_next_lbl["text"] = self.dist_next
+                self.dist_next_lbl.grid()
+            
+            # Update fuel labels display
+            # Pack labels inside the container frame to display side by side
+            # Clear any existing packed widgets first
+            for widget in self.fuel_labels_frame.winfo_children():
+                widget.pack_forget()
+            
+            show_fuel_frame = False
+            
+            logger.debug(f"[_update_widget_visibility] offset={self.offset}, route_len={len(self.route)}, galaxy={self.galaxy}, has_fuel_used={self.has_fuel_used}, fuel_used={self.fuel_used!r}, fuel_remaining={self.fuel_remaining!r}")
+            
+            # Show Fuel Used if available
+            if self.has_fuel_used and self.fuel_used:
+                # fuel_used is already rounded and formatted as string from compute_distances()
+                self.fuel_used_lbl["text"] = f"{plugin_tl('Fuel Used')}: {self.fuel_used}"
+                self.fuel_used_lbl.pack(side=tk.LEFT, padx=(0, 10))
+                show_fuel_frame = True
+                logger.debug(f"[_update_widget_visibility] Showing Fuel Used label")
+            
+            # Show Fuel Remaining for galaxy routes if available
+            if self.galaxy and self.fuel_remaining:
+                self.fuel_remaining_lbl["text"] = f"{plugin_tl('Fuel Remaining')}: {self.fuel_remaining}"
+                self.fuel_remaining_lbl.pack(side=tk.LEFT)
+                show_fuel_frame = True
+                logger.debug(f"[_update_widget_visibility] Showing Fuel Remaining label")
+            
+            # Show or hide the container frame based on whether any fuel labels are visible
+            if show_fuel_frame:
+                self.fuel_labels_frame.grid()
+                logger.debug(f"[_update_widget_visibility] Showing fuel_labels_frame")
+            else:
+                self.fuel_labels_frame.grid_remove()
+                logger.debug(f"[_update_widget_visibility] Hiding fuel_labels_frame")
             
             # Update waypoint button states
             if self.offset == 0:
@@ -885,6 +1188,16 @@ class GalaxyGPS():
         """Update the GUI based on current state"""
         if len(self.route) > 0:
             self._update_widget_visibility('route')
+            # Ensure waypoint button text is updated (especially important for Road to Riches)
+            # This handles cases where next_stop might have been updated but button text wasn't refreshed
+            if hasattr(self, 'waypoint_btn') and hasattr(self, 'next_stop') and hasattr(self, 'next_wp_label'):
+                try:
+                    # Use config() instead of direct assignment for more reliable updates
+                    button_text = self.next_wp_label + '\n' + (self.next_stop if self.next_stop else "")
+                    self.waypoint_btn.config(text=button_text)
+                    self.waypoint_btn.update_idletasks()
+                except Exception:
+                    pass  # Silently fail if button doesn't exist yet
         else:
             self._update_widget_visibility('empty')
 
@@ -905,7 +1218,7 @@ class GalaxyGPS():
             self.efficiency_slider.update_idletasks()
             self.range_entry.config(state=tk.NORMAL)
             self.range_entry.update_idletasks()
-            self.plot_route_btn.config(state=tk.NORMAL, text="Calculate")
+            self.plot_route_btn.config(state=tk.NORMAL, text=plugin_tl("Calculate"))  # LANG: Button text when ready to calculate
             self.plot_route_btn.update_idletasks()
             self.cancel_plot.config(state=tk.NORMAL)
             self.cancel_plot.update_idletasks()
@@ -923,7 +1236,7 @@ class GalaxyGPS():
             self.efficiency_slider.update_idletasks()
             self.range_entry.config(state=tk.DISABLED)
             self.range_entry.update_idletasks()
-            self.plot_route_btn.config(state=tk.DISABLED, text="Computing...")
+            self.plot_route_btn.config(state=tk.DISABLED, text=plugin_tl("Computing..."))  # LANG: Button text during route calculation
             self.plot_route_btn.update_idletasks()
             self.cancel_plot.config(state=tk.DISABLED)
             self.cancel_plot.update_idletasks()
@@ -940,57 +1253,98 @@ class GalaxyGPS():
     def open_last_route(self):
         try:
             has_headers = False
-            with open(self.save_route_path, 'r', newline='') as csvfile:
+            with open(self.save_route_path, 'r', encoding='utf-8-sig', newline='') as csvfile:
                 # Check if the file has a header for compatibility with previous versions
                 dict_route_reader = csv.DictReader(csvfile)
-                if dict_route_reader.fieldnames[0] == self.system_header:
+                if dict_route_reader.fieldnames and dict_route_reader.fieldnames[0] == self.system_header:
                     has_headers = True
 
             if has_headers:
+                # Use plot_csv to properly load the route with all columns
                 self.plot_csv(self.save_route_path, clear_previous_route=False)
+                
+                # Load offset
+                try:
+                    with open(self.offset_file_path, 'r') as offset_fh:
+                        self.offset = int(offset_fh.readline())
+                except (IOError, OSError, ValueError):
+                    self.offset = 0
+                
+                # Calculate jumps_left from current offset
+                self.jumps_left = 0
+                for i in range(self.offset, len(self.route)):
+                    row = self.route[i]
+                    if len(row) > 1 and row[1] not in [None, "", []]:
+                        if not self.galaxy:  # galaxy type doesn't have a jumps column
+                            try:
+                                self.jumps_left += int(row[1])
+                            except (ValueError, TypeError):
+                                pass  # Skip rows with non-numeric jumps values
+                        else:
+                            self.jumps_left += 1
+                
+                # Set next waypoint
+                if self.route and len(self.route) > 0:
+                    self.next_stop = self.route[self.offset][0]
+                    self.update_bodies_text()
+                    self.compute_distances()
+                    self.copy_waypoint()
+                    
+                    # Explicitly update GUI to show route navigation
+                    self.update_gui()
+                    # Force GUI refresh to ensure all widgets are visible
+                    if hasattr(self, 'parent'):
+                        self.parent.update_idletasks()
             else:
+                # Old format without headers - legacy support
                 with open(self.save_route_path, 'r', newline='') as csvfile:
                     route_reader = csv.reader(csvfile)
-
                     for row in route_reader:
                         if row not in (None, "", []):
                             self.route.append(row)
-
-            try:
-                with open(self.offset_file_path, 'r') as offset_fh:
-                    self.offset = int(offset_fh.readline())
-
-            except (IOError, OSError, ValueError):
-                self.offset = 0
-
-            self.jumps_left = 0
-            for row in self.route[self.offset:]:
-                if row[1] not in [None, "", []]:
-                    if not self.galaxy: # galaxy type doesn't have a jumps column
-
-                        self.jumps_left += int(row[1])
-                    else:
-                        self.jumps_left += 1
-                    
-
-            self.next_stop = self.route[self.offset][0]
-            self.update_bodies_text()
-            self.compute_distances()
-            self.copy_waypoint()
-            self.update_gui()
+                
+                # Load offset
+                try:
+                    with open(self.offset_file_path, 'r') as offset_fh:
+                        self.offset = int(offset_fh.readline())
+                except (IOError, OSError, ValueError):
+                    self.offset = 0
+                
+                # Calculate jumps_left
+                self.jumps_left = 0
+                for i in range(self.offset, len(self.route)):
+                    row = self.route[i]
+                    if len(row) > 1 and row[1] not in [None, "", []]:
+                        if not self.galaxy:
+                            try:
+                                self.jumps_left += int(row[1])
+                            except (ValueError, TypeError):
+                                pass
+                        else:
+                            self.jumps_left += 1
+                
+                if self.route and len(self.route) > 0:
+                    self.next_stop = self.route[self.offset][0]
+                    self.update_bodies_text()
+                    self.compute_distances()
+                    self.copy_waypoint()
+                    self.update_gui()
 
         except IOError:
-            logger.info("No previously saved route")
+            logger.debug("No previously saved route")
         except Exception:
             logger.warning('!! ' + traceback.format_exc(), exc_info=False)
 
     def copy_waypoint(self):
         if sys.platform == "linux":
-            clipboard_cli = os.getenv("EDMC_GALAXYGPS_XCLIP") or "xclip -selection c"
-            clipboard_cli = clipboard_cli.split()
-            command = subprocess.Popen(["echo", "-n", self.next_stop], stdout=subprocess.PIPE)
-            subprocess.Popen(clipboard_cli, stdin=command.stdout)
-        else:
+            cmd = (os.getenv("EDMC_GALAXYGPS_XCLIP") or "xclip -selection c").split()
+            try:
+                p = subprocess.Popen(cmd, stdin=subprocess.PIPE)
+                p.communicate(input=self.next_stop.encode('utf-8'), timeout=2)
+            except (FileNotFoundError, subprocess.TimeoutExpired) as e:
+                logger.debug("Linux clipboard failed: %s", e)
+            return
+        if self.parent:
             self.parent.clipboard_clear()
             self.parent.clipboard_append(self.next_stop)
             self.parent.update()
@@ -1003,6 +1357,14 @@ class GalaxyGPS():
         if not hasattr(self, "offset") or self.offset is None:
             self.offset = 0
 
+        # Ensure offset is valid before proceeding
+        if self.offset < 0:
+            self.offset = 0
+        if self.offset >= len(self.route):
+            self.offset = len(self.route) - 1
+
+        # For Road to Riches, we skip to next different system, so we can't just check offset < len - 1
+        # Instead, check if we're not already at the last system
         if self.offset < len(self.route) - 1:
             self.update_route(1)
 
@@ -1014,6 +1376,14 @@ class GalaxyGPS():
         if not hasattr(self, "offset") or self.offset is None:
             self.offset = 0
 
+        # Ensure offset is valid before proceeding
+        if self.offset < 0:
+            self.offset = 0
+        if self.offset >= len(self.route):
+            self.offset = len(self.route) - 1
+
+        # For Road to Riches, we skip to previous different system, so we can't just check offset > 0
+        # Instead, check if we're not already at the first system
         if self.offset > 0:
             self.update_route(-1)
 
@@ -1026,11 +1396,13 @@ class GalaxyGPS():
           - Distance Remaining (if present) is stored on the current row as route[i][3].
         This function handles rows that may or may not have the distance columns.
         """
+        
         # Reset
         self.dist_prev = ""
         self.dist_next = ""
         self.dist_remaining = ""
         self.fuel_used = ""
+        self.fuel_remaining = ""
 
         if not (0 <= self.offset < len(self.route)):
             return
@@ -1045,84 +1417,399 @@ class GalaxyGPS():
                 return None
 
         cur = self.route[self.offset]
-
-        # --- LY from previous ---
-        # If current row has distance_to_arrival (index >=3? actually index 2 zero-based),
-        # that's the distance from previous -> current.
-        if len(cur) >= 3:
-            pv = safe_flt(cur[2])
-            if pv is not None:
-                self.dist_prev = f"Jump LY: {pv:.2f}"
+        
+        # Extract Fuel Remaining from current waypoint for galaxy routes (index 4)
+        if self.galaxy and len(cur) >= 5:
+            fuel_remaining_val = cur[4]
+            if fuel_remaining_val and fuel_remaining_val.strip():
+                self.fuel_remaining = fuel_remaining_val
             else:
-                # fallback: try jumps value (index 1)
-                pv2 = safe_flt(cur[1])
-                if pv2 is not None:
-                    self.dist_prev = f"Number of Jumps: {pv2:.2f}"
+                self.fuel_remaining = ""
         else:
-            # no explicit distance columns — try best-effort from jumps on prev row
-            if self.offset > 0:
-                prev = self.route[self.offset - 1]
-                pj = safe_flt(prev[1])
-                if pj is not None:
-                    self.dist_prev = f"Number of Jumps: {pj:.2f}"
-                else:
-                    self.dist_prev = "Start of the journey"
-            else:
-                self.dist_prev = "Start of the journey"
+            self.fuel_remaining = ""
 
-        # --- LY to next ---
-        if self.offset < len(self.route) - 1:
-            nxt = self.route[self.offset + 1]
-            # prefer distance_to_arrival on the NEXT row (distance from current -> next)
-            if len(nxt) >= 3:
-                nv = safe_flt(nxt[2])
-                if nv is not None:
-                    self.dist_next = f"Next jump LY: {nv:.2f}"
-                else:
-                    nv2 = safe_flt(nxt[1])
-                    if nv2 is not None:
-                        self.dist_next = f"Next waypoint jumps: {nv2:.2f}"
-            else:
-                nv2 = safe_flt(nxt[1])
-                if nv2 is not None:
-                    self.dist_next = f"Next waypoint jumps: {nv2:.2f}"
+        # --- Special handling for neutron routes with per-leg jumps ---
+        if self.neutron:
+            # For neutron routes, internal format is: [System Name, Distance To Arrival, Distance Remaining, Jumps]
+            # cur[1] = Distance To Arrival
+            # cur[2] = Distance Remaining
+            # cur[3] = Jumps (jumps TO REACH that waypoint)
+            cur_jumps = safe_flt(cur[3]) if len(cur) >= 4 else None
             
-            # Extract Fuel Used from next waypoint if available
-            # For fleet carrier routes with has_fuel_used: [System, Jumps, Dist, Dist Rem, Restock Trit, Fuel Used, ...]
-            #   Fuel Used is at index 5
-            # For galaxy routes with has_fuel_used: [System, Refuel, Dist, Dist Rem, Fuel Used, ...]
-            #   Fuel Used is at index 4
-            # For generic routes with has_fuel_used: [System, Jumps, Fuel Used, ...]
-            #   Fuel Used is at index 2
-            if self.has_fuel_used:
-                fuel_used_value = None
-                if self.fleetcarrier and len(nxt) > 5:
-                    # Fleet carrier: Fuel Used is at index 5 (after System, Jumps, Dist, Dist Rem, Restock Trit)
-                    fuel_used_value = nxt[5] if nxt[5] else None
-                elif self.galaxy and len(nxt) > 4:
-                    # Galaxy route: Fuel Used is at index 4 (after System, Refuel, Dist, Dist Rem)
-                    fuel_used_value = nxt[4] if nxt[4] else None
+            # "Number of Jumps" = jumps to reach this waypoint (read directly from current row)
+            if cur_jumps is not None:
+                if cur_jumps == 0:
+                    # Starting point
+                    self.dist_prev = plugin_tl("Start of the journey")
+                elif self.offset >= len(self.route) - 1:
+                    # Check if Distance Remaining (column 2) is 0 to show Finished
+                    dist_remaining_val = safe_flt(cur[2]) if len(cur) >= 3 else None
+                    if dist_remaining_val is not None and dist_remaining_val == 0:
+                        self.dist_prev = plugin_tl("Finished")
+                    else:
+                        self.dist_prev = f"{plugin_tl('Number of Jumps')}: {cur_jumps:.2f}"
                 else:
-                    # Generic route: Fuel Used might be at index 2 (after System, Jumps)
-                    if len(nxt) > 2:
-                        fuel_used_value = nxt[2] if nxt[2] else None
+                    self.dist_prev = f"Number of Jumps: {cur_jumps:.2f}"
+            else:
+                self.dist_prev = ""
+            
+            # "Next waypoint jumps" = jumps to reach next waypoint (read from next row)
+            if self.offset < len(self.route) - 1:
+                nxt = self.route[self.offset + 1]
+                next_jumps = safe_flt(nxt[3]) if len(nxt) >= 4 else None
+                if next_jumps is not None and next_jumps > 0:
+                    self.dist_next = f"{plugin_tl('Next waypoint jumps')}: {next_jumps:.2f}"
+                else:
+                    # Check if we're at the end (Distance Remaining = 0)
+                    dist_remaining_val = safe_flt(nxt[2]) if len(nxt) >= 3 else None
+                    if dist_remaining_val is not None and dist_remaining_val == 0:
+                        self.dist_next = plugin_tl("Finished")
+                    else:
+                        self.dist_next = ""
+            else:
+                self.dist_next = plugin_tl("Finished")
+            
+            # Skip the normal computation and jump to distance remaining calculation
+            # (which is handled at the end of this function)
+            self.fuel_used = ""  # Neutron routes don't have fuel used
+        else:
+            # Normal (non-neutron) route handling follows below
+            pass
+
+        # --- LY from previous / Number of Jumps (current waypoint) ---
+        # Get the jump count for the system shown in "Next Waypoint" (self.next_stop)
+        # This ensures the jump count matches the displayed waypoint system
+        
+        if not self.neutron:
+            # Determine if we're at the start of the journey
+            # Show "Start of the journey" if:
+            # 1. The next waypoint system (self.next_stop) is the first system in the route
+            # 2. AND current EDMC system doesn't match that first system
+            at_start = False
+            first_route_system = self._get_system_name_at_index(0)
+            
+            # Check if the waypoint we're showing (next_stop) is the first system in the route
+            if self.next_stop and first_route_system and self.next_stop.lower() == first_route_system.lower():
+                # We're showing the first system - check if we need to travel there
+                current_system = None
+                if self.fleetcarrier:
+                    if self.selected_carrier_callsign and self.fleet_carrier_manager:
+                        carrier = self.fleet_carrier_manager.get_carrier(self.selected_carrier_callsign)
+                        if carrier:
+                            current_system = carrier.get('current_system', '')
+                else:
+                    current_system = monitor.state.get('SystemName')
                 
-                if fuel_used_value and fuel_used_value.strip():
-                    # Round Fuel Used UP to nearest hundredth (2 decimal places) like distances
-                    try:
-                        val = float(fuel_used_value.strip())
-                        rounded_val = math.ceil(val * 100) / 100
-                        self.fuel_used = f"{rounded_val:.2f}"
-                    except (ValueError, TypeError):
-                        # If not a number, use as-is
-                        self.fuel_used = fuel_used_value.strip()
+                # Show "Start of the journey" unless we're already at the first system
+                if current_system and first_route_system:
+                    # If systems match, we're already at the first waypoint - show jumps instead
+                    at_start = current_system.lower() != first_route_system.lower()
+                else:
+                    # If we don't have system info, default to showing "Start of the journey"
+                    at_start = True
+            
+            # Find the jump count for the current waypoint system (shown in next_stop)
+            jump_count = None
+            
+            # For Fleet Carrier routes, read distance from index 1
+            if self.fleetcarrier and len(cur) >= 2:
+                pv = safe_flt(cur[1])
+                if pv is not None:
+                    self.dist_prev = f"Jump LY: {pv:.2f}"
+                    jump_count = -1  # Flag to skip jump count display
+            elif len(cur) >= 3:
+                pv = safe_flt(cur[2])
+                if pv is not None:
+                    self.dist_prev = f"Jump LY: {pv:.2f}"
+                    jump_count = -1  # Flag to skip jump count display
+                else:
+                    # Get jumps from current row or look backward for Road to Riches
+                    jump_count = safe_flt(cur[1])
+                    # For Road to Riches: if jump_count is 0 or None, look backward
+                    # (0 means body row, None means missing data)
+                    if self.roadtoriches and (jump_count is None or jump_count == 0) and self.offset > 0:
+                        # Look backward to find the first non-zero jump (the system's jump count)
+                        for idx in range(self.offset - 1, -1, -1):
+                            prev_row = self.route[idx]
+                            if len(prev_row) >= 2:
+                                prev_jump = safe_flt(prev_row[1])
+                                if prev_jump is not None and prev_jump > 0:
+                                    jump_count = prev_jump
+                                    break
+                    # For non-Road to Riches: if jump_count is 0, look backward
+                    elif not self.roadtoriches and jump_count == 0 and self.offset > 0:
+                        for idx in range(self.offset - 1, -1, -1):
+                            prev_row = self.route[idx]
+                            if len(prev_row) >= 2:
+                                prev_jump = safe_flt(prev_row[1])
+                                if prev_jump is not None and prev_jump > 0:
+                                    jump_count = prev_jump
+                                    break
+            else:
+                # no explicit distance columns — try jumps from current row or look backward
+                jump_count = safe_flt(cur[1]) if len(cur) >= 2 else None
+                # For Road to Riches: if jump_count is 0 or None, look backward
+                if self.roadtoriches and (jump_count is None or jump_count == 0) and self.offset > 0:
+                    # Look backward to find the first non-zero jump (the system's jump count)
+                    for idx in range(self.offset - 1, -1, -1):
+                        prev_row = self.route[idx]
+                        if len(prev_row) >= 2:
+                            prev_jump = safe_flt(prev_row[1])
+                            if prev_jump is not None and prev_jump > 0:
+                                jump_count = prev_jump
+                                break
+                # For non-Road to Riches: if jump_count is 0, look backward
+                elif not self.roadtoriches and jump_count == 0 and self.offset > 0:
+                    for idx in range(self.offset - 1, -1, -1):
+                        prev_row = self.route[idx]
+                        if len(prev_row) >= 2:
+                            prev_jump = safe_flt(prev_row[1])
+                            if prev_jump is not None and prev_jump > 0:
+                                jump_count = prev_jump
+                                break
+            
+            # Display jump count or status
+            
+            # Check at_start FIRST before checking jump_count
+            # At offset 0, show "Start of the journey" unless we're already at the first system
+            if at_start:
+                self.dist_prev = plugin_tl("Start of the journey")
+            elif jump_count == -1:
+                pass  # Already set dist_prev with LY
+            elif jump_count is not None and jump_count > 0:
+                if self.offset >= len(self.route) - 1:
+                    self.dist_prev = plugin_tl("Finished")
+                else:
+                    self.dist_prev = f"{plugin_tl('Number of Jumps')}: {jump_count:.2f}"
+            else:
+                # No valid jump count found
+                if self.offset >= len(self.route) - 1:
+                    self.dist_prev = plugin_tl("Finished")
+                else:
+                    # No jump data available - leave empty
+                    self.dist_prev = ""
+
+            # --- LY to next / Next waypoint jumps ---
+            # For galaxy routes: show Distance Remaining from next waypoint
+            # For other routes: skip rows with 0 jumps to find the next actual system jump (for Road to Riches)
+            if self.offset < len(self.route) - 1:
+                next_jump_idx = None  # Initialize for non-galaxy routes
+                
+                # For galaxy routes, use the next row's Distance Remaining (index 3)
+                if self.galaxy:
+                    nxt = self.route[self.offset + 1]
+                    if len(nxt) >= 4:
+                        dist_remaining_val = safe_flt(nxt[3])
+                        if dist_remaining_val is not None:
+                            if dist_remaining_val == 0:
+                                self.dist_next = plugin_tl("Finished")
+                            else:
+                                self.dist_next = f"{plugin_tl('Distance Remaining')}: {dist_remaining_val:.2f}"
+                        else:
+                            self.dist_next = ""
+                    else:
+                        self.dist_next = ""
+                else:
+                    # For non-galaxy routes: Find next row with non-zero jumps (for Road to Riches)
+                    # For fleet carrier routes: Just use the next row directly
+                    if self.fleetcarrier:
+                        # Fleet carrier routes: Use next row directly
+                        # Format: [System Name, Distance, Distance Remaining, Tritium in tank, Tritium in market, Fuel Used, Icy Ring, Pristine, Restock Tritium]
+                        nxt = self.route[self.offset + 1]
+                        if len(nxt) >= 2:
+                            # Distance is at index 1 for fleet carrier routes
+                            nv = safe_flt(nxt[1])
+                            if nv is not None and nv > 0:
+                                self.dist_next = f"{plugin_tl('Next jump LY')}: {nv:.2f}"
+                            else:
+                                self.dist_next = plugin_tl("Finished")
+                        else:
+                            self.dist_next = plugin_tl("Finished")
+                        next_jump_idx = self.offset + 1
+                    else:
+                        # For other non-galaxy routes: Find next row with non-zero jumps (for Road to Riches)
+                        for idx in range(self.offset + 1, len(self.route)):
+                            nxt = self.route[idx]
+                            # Check if this row has a non-zero jump value
+                            if len(nxt) >= 2:
+                                jump_val = safe_flt(nxt[1])
+                                if jump_val is not None and jump_val > 0:
+                                    next_jump_idx = idx
+                                    break
+                        
+                        if next_jump_idx is not None:
+                            nxt = self.route[next_jump_idx]
+                            # prefer distance_to_arrival on the NEXT row (distance from current -> next)
+                            if len(nxt) >= 3:
+                                nv = safe_flt(nxt[2])
+                                if nv is not None:
+                                    self.dist_next = f"{plugin_tl('Next jump LY')}: {nv:.2f}"
+                                else:
+                                    nv2 = safe_flt(nxt[1])
+                                    if nv2 is not None and nv2 > 0:
+                                        self.dist_next = f"{plugin_tl('Next waypoint jumps')}: {nv2:.2f}"
+                                    else:
+                                        self.dist_next = plugin_tl("Finished")
+                            else:
+                                nv2 = safe_flt(nxt[1])
+                                if nv2 is not None and nv2 > 0:
+                                    self.dist_next = f"{plugin_tl('Next waypoint jumps')}: {nv2:.2f}"
+                                else:
+                                    self.dist_next = plugin_tl("Finished")
+                        else:
+                            # No more non-zero jumps found - we're finished
+                            self.dist_next = plugin_tl("Finished")
+                            self.fuel_used = ""
+                
+                # Extract Fuel Used from waypoint
+                if next_jump_idx is not None or self.galaxy or self.fleetcarrier:
+                    if self.galaxy:
+                        # For galaxy routes, use the next row directly
+                        nxt = self.route[self.offset + 1] if self.offset < len(self.route) - 1 else None
+                    elif self.fleetcarrier:
+                        # For fleet carrier routes, use the CURRENT row
+                        nxt = cur
+                    else:
+                        # For other routes, use the next_jump_idx
+                        nxt = self.route[next_jump_idx] if next_jump_idx is not None else None
+                    
+                    if nxt:
+                        # Extract Fuel Used from waypoint if available
+                        # For galaxy routes with has_fuel_used: [System, Refuel, Dist, Dist Rem, Fuel Left, Fuel Used, ...]
+                        #   Fuel Left is at index 4, Fuel Used is at index 5 (from NEXT waypoint)
+                        # For fleet carrier routes with has_fuel_used: [System Name, Distance, Distance Remaining, Tritium in tank, Tritium in market, Fuel Used, Icy Ring, Pristine, Restock Tritium]
+                        #   Fuel Used is at index 5 (from CURRENT waypoint via nxt=cur)
+                        # For generic routes with has_fuel_used: [System, Jumps, Fuel Used, ...]
+                        #   Fuel Used is at index 2
+                        if self.has_fuel_used:
+                            fuel_used_value = None
+                            if self.galaxy and len(nxt) > 5:
+                                # Galaxy route: Fuel Used is at index 5
+                                fuel_used_value = nxt[5] if nxt[5] else None
+                            elif self.fleetcarrier and len(nxt) > 5:
+                                # Fleet carrier route: Fuel Used is at index 5
+                                fuel_used_value = nxt[5] if nxt[5] else None
+                            elif len(nxt) > 2:
+                                # Generic route: Fuel Used might be at index 2 (after System, Jumps)
+                                fuel_used_value = nxt[2] if nxt[2] else None
+                            
+                            if fuel_used_value and fuel_used_value.strip():
+                                # Round Fuel Used UP to nearest hundredth (2 decimal places) like distances
+                                try:
+                                    val = float(fuel_used_value.strip())
+                                    rounded_val = math.ceil(val * 100) / 100
+                                    self.fuel_used = f"{rounded_val:.2f}"
+                                except (ValueError, TypeError):
+                                    # If not a number, use as-is
+                                    self.fuel_used = fuel_used_value.strip()
+                            else:
+                                self.fuel_used = ""
+                        else:
+                            self.fuel_used = ""
+                    else:
+                        self.fuel_used = ""
+            else:
+                # At the last row - finished
+                self.dist_next = plugin_tl("Finished")
+                # For galaxy routes, still show fuel used from current row at last waypoint
+                if self.galaxy and self.has_fuel_used:
+                    logger.debug(f"[compute_distances] At last row, galaxy route with fuel_used column. cur length: {len(cur)}")
+                    if len(cur) > 5:
+                        fuel_used_value = cur[5] if cur[5] else None
+                        logger.debug(f"[compute_distances] fuel_used_value from cur[5]: {fuel_used_value}")
+                        if fuel_used_value and fuel_used_value.strip():
+                            try:
+                                val = float(fuel_used_value.strip())
+                                rounded_val = math.ceil(val * 100) / 100
+                                self.fuel_used = f"{rounded_val:.2f}"
+                                logger.debug(f"[compute_distances] Set fuel_used to: {self.fuel_used}")
+                            except (ValueError, TypeError):
+                                self.fuel_used = fuel_used_value.strip()
+                                logger.debug(f"[compute_distances] Set fuel_used (non-float) to: {self.fuel_used}")
+                        else:
+                            self.fuel_used = ""
+                            logger.debug(f"[compute_distances] fuel_used_value was empty/None, setting fuel_used to empty")
+                    else:
+                        self.fuel_used = ""
+                        logger.debug(f"[compute_distances] cur length {len(cur)} <= 5, setting fuel_used to empty")
+                # For fleet carrier routes, also show fuel used from current row at last waypoint
+                elif self.fleetcarrier and self.has_fuel_used:
+                    logger.debug(f"[compute_distances] At last row, fleet carrier route with fuel_used column. cur length: {len(cur)}")
+                    # Fleet carrier routes have fuel used at index 5
+                    if len(cur) > 5:
+                        fuel_used_value = cur[5] if cur[5] else None
+                        logger.debug(f"[compute_distances] fuel_used_value from cur[5]: {fuel_used_value}")
+                        if fuel_used_value and fuel_used_value.strip():
+                            try:
+                                val = float(fuel_used_value.strip())
+                                rounded_val = math.ceil(val * 100) / 100
+                                self.fuel_used = f"{rounded_val:.2f}"
+                                logger.debug(f"[compute_distances] Set fuel_used to: {self.fuel_used}")
+                            except (ValueError, TypeError):
+                                self.fuel_used = fuel_used_value.strip()
+                                logger.debug(f"[compute_distances] Set fuel_used (non-float) to: {self.fuel_used}")
+                        else:
+                            self.fuel_used = ""
+                            logger.debug(f"[compute_distances] fuel_used_value was empty/None, setting fuel_used to empty")
+                    else:
+                        self.fuel_used = ""
+                        logger.debug(f"[compute_distances] cur length {len(cur)} <= 5, setting fuel_used to empty")
                 else:
                     self.fuel_used = ""
-        else:
-            self.dist_next = ""
-            self.fuel_used = ""
+                    if self.galaxy:
+                        logger.debug(f"[compute_distances] Galaxy route but has_fuel_used={self.has_fuel_used}, setting fuel_used to empty")
+                    elif self.fleetcarrier:
+                        logger.debug(f"[compute_distances] Fleet carrier route but has_fuel_used={self.has_fuel_used}, setting fuel_used to empty")
+            # End of non-neutron route handling
 
         # --- Total remaining ---
+        # Check if the route has a "Jumps" column
+        has_jumps_column = any(
+            fieldname.lower() == 'jumps' 
+            for fieldname in self.route_fieldnames
+        ) if self.route_fieldnames else False
+        
+        # If no "Jumps" column, use fallback: count remaining rows (for fleet carrier routes, etc.)
+        if not has_jumps_column:
+            # Check if we're at the last waypoint
+            if self.offset >= len(self.route) - 1:
+                self.dist_remaining = plugin_tl("Finished")
+            else:
+                # Count remaining rows after current position (each row = 1 jump)
+                remaining_rows = len(self.route) - self.offset - 1
+                if remaining_rows > 0:
+                    self.dist_remaining = f"{plugin_tl('Remaining jumps afterwards')}: {remaining_rows}"
+                else:
+                    self.dist_remaining = plugin_tl("Finished")
+            return
+        
+        # For neutron routes, the "Jumps" column contains jumps TO REACH each waypoint
+        # Internal format: [System Name, Distance To Arrival, Distance Remaining, Jumps]
+        # Check Distance Remaining column (index 2) first to see if we're finished
+        if self.neutron:
+            # Check if Distance Remaining = 0 (we're at the destination)
+            if len(cur) >= 3:
+                dist_remaining_val = safe_flt(cur[2])
+                if dist_remaining_val is not None and dist_remaining_val == 0:
+                    self.dist_remaining = plugin_tl("Finished")
+                    return
+            
+            # Not finished yet - sum all remaining jump values from the next row onwards
+            # Jumps are now at index 3
+            s = 0.0
+            for r in self.route[self.offset + 1:]:
+                if len(r) >= 4:
+                    v = safe_flt(r[3])
+                    if v is not None:
+                        s += v
+            
+            if s > 0:
+                self.dist_remaining = f"{plugin_tl('Remaining jumps afterwards')}: {s:.2f}"
+            else:
+                self.dist_remaining = ""
+            return
+        
+        # For non-neutron routes: calculate by summing or using Distance Remaining column
         # Prefer exact Distance Remaining at current row (index 3)
         total_rem = None
         if len(cur) >= 4:
@@ -1146,7 +1833,7 @@ class GalaxyGPS():
                 total_rem = total
 
         if total_rem is not None:
-            self.dist_remaining = f"LY afterwards: {total_rem:.2f}"
+            self.dist_remaining = f"{plugin_tl('Remaining jumps afterwards')}: {total_rem:.2f}"
         else:
             # final fallback: sum numeric jumps (index 1) as approximate
             s = 0.0
@@ -1158,7 +1845,7 @@ class GalaxyGPS():
                     break
                 s += v
             if ok and s > 0:
-                self.dist_remaining = f"Remaining jumps afterwards: {s:.2f}"
+                self.dist_remaining = f"{plugin_tl('Remaining jumps afterwards')}: {s:.2f}"
             else:
                 self.dist_remaining = ""
 
@@ -1212,29 +1899,50 @@ class GalaxyGPS():
         found_index = -1
         
         for idx, waypoint in enumerate(self.route):
-            waypoint_system = waypoint[0] if waypoint and len(waypoint) > 0 else ""
+            # Use helper method to get system name (handles empty names for Road to Riches)
+            waypoint_system = self._get_system_name_at_index(idx)
             if waypoint_system and waypoint_system.lower() == current_system_lower:
                 # Found a match - we're at this waypoint
                 found_index = idx
         
         if found_index >= 0:
-            # We're at a waypoint - advance to the next one
+            # We're at a waypoint - advance to the next one with a different system name
+            # Get the current system name to compare against
+            current_waypoint_system = self._get_system_name_at_index(found_index)
             next_index = found_index + 1
+            
+            # Skip rows with the same system name (for Road to Riches where system names don't repeat)
+            while next_index < len(self.route):
+                next_system_name = self._get_system_name_at_index(next_index)
+                # If we found a different system name (or reached the end), use it
+                if next_system_name != current_waypoint_system:
+                    break
+                next_index += 1
+            
             if next_index >= len(self.route):
-                # We're at the last waypoint, stay there
+                # We're at or past the last waypoint, stay at the last one
                 next_index = len(self.route) - 1
             
             # Update jumps_left to account for skipping waypoints we've already passed
             for idx in range(next_index):
                 if idx < len(self.route) and len(self.route[idx]) > 1:
-                    if self.route[idx][1] not in [None, "", []]:
-                        try:
-                            if not self.galaxy:
+                    try:
+                        if self.fleetcarrier:
+                            # Fleet carrier routes: each row is 1 jump
+                            self.jumps_left -= 1
+                        elif self.neutron:
+                            # Neutron routes: jumps are at index 3
+                            if len(self.route[idx]) > 3 and self.route[idx][3] not in [None, "", []]:
+                                self.jumps_left -= int(self.route[idx][3])
+                        elif self.galaxy:
+                            # Galaxy routes: each row is 1 jump
+                            self.jumps_left -= 1
+                        else:
+                            # Generic routes: jumps are at index 1
+                            if len(self.route[idx]) > 1 and self.route[idx][1] not in [None, "", []]:
                                 self.jumps_left -= int(self.route[idx][1])
-                            else:
-                                self.jumps_left -= 1
-                        except (ValueError, TypeError):
-                            pass
+                    except (ValueError, TypeError):
+                        pass
             
             return next_index
         else:
@@ -1243,6 +1951,27 @@ class GalaxyGPS():
             # Could enhance this later to check distance to nearest waypoint
             return 0
     
+    def _get_system_name_at_index(self, idx):
+        """
+        Get the system name at a given route index, handling empty system names for Road to Riches.
+        For Road to Riches, if system name is empty, use the previous non-empty system name.
+        """
+        if idx < 0 or idx >= len(self.route):
+            return None
+        
+        system_name = self.route[idx][0] if len(self.route[idx]) > 0 else ""
+        
+        # For Road to Riches, if system name is empty, look backwards for the last non-empty name
+        if self.roadtoriches and (not system_name or system_name.strip() == ""):
+            # Look backwards to find the last non-empty system name
+            for prev_idx in range(idx - 1, -1, -1):
+                prev_system = self.route[prev_idx][0] if len(self.route[prev_idx]) > 0 else ""
+                if prev_system and prev_system.strip():
+                    return prev_system.strip()
+            return None
+        
+        return system_name.strip() if system_name else None
+
     def update_route(self, direction=1):
         # Guard: no route -> nothing to do
         if len(self.route) == 0:
@@ -1255,31 +1984,93 @@ class GalaxyGPS():
             self.offset = 0
 
         # clamp offset into valid range before operating
+        # CRITICAL: Ensure offset is always valid, especially after window operations
         if self.offset < 0:
+            logger.warning(f'[update_route] Offset was negative ({self.offset}), correcting to 0')
             self.offset = 0
         if self.offset >= len(self.route):
+            logger.warning(f'[update_route] Offset ({self.offset}) >= route length ({len(self.route)}), correcting')
             self.offset = len(self.route) - 1
+        
+        # Additional safety check: if route is empty after validation, reset
+        if len(self.route) == 0:
+            self.next_stop = "No route planned"
+            self.update_gui()
+            return
+
+        # Get current system name (handling empty names for Road to Riches)
+        current_system_name = self._get_system_name_at_index(self.offset)
+        # Handle None case - if we can't get system name, use empty string for comparison
+        if current_system_name is None:
+            current_system_name = ""
 
         try:
             if direction > 0:
-                # subtract jumps for current offset (if present) then advance
-                if self.route[self.offset][1] not in [None, "", []]:
-                    if not self.galaxy:
+                # Moving forward: skip to next row with different system name
+                # First, subtract jumps for current offset (if present)
+                if self.fleetcarrier:
+                    # Fleet carrier routes: each row is 1 jump
+                    self.jumps_left -= 1
+                elif self.neutron:
+                    # Neutron routes: jumps are at index 3
+                    if len(self.route[self.offset]) > 3 and self.route[self.offset][3] not in [None, "", []]:
+                        self.jumps_left -= int(self.route[self.offset][3])
+                elif self.galaxy:
+                    # Galaxy routes: each row is 1 jump
+                    self.jumps_left -= 1
+                else:
+                    # Generic routes: jumps are at index 1
+                    if len(self.route[self.offset]) > 1 and self.route[self.offset][1] not in [None, "", []]:
                         self.jumps_left -= int(self.route[self.offset][1])
-                    else:
-                        self.jumps_left -= 1
-                # advance but clamp
-                if self.offset < len(self.route) - 1:
-                    self.offset += 1
+                
+                # Find next row with different system name
+                new_offset = self.offset
+                while new_offset < len(self.route) - 1:
+                    new_offset += 1
+                    next_system_name = self._get_system_name_at_index(new_offset)
+                    # Handle None case
+                    if next_system_name is None:
+                        next_system_name = ""
+                    # If we found a different system name (or reached the end), use it
+                    if next_system_name != current_system_name:
+                        self.offset = new_offset
+                        break
+                else:
+                    # Reached end of route without finding different system
+                    self.offset = len(self.route) - 1
             else:
-                # move back, but avoid negative indexes
+                # Moving backward: skip to previous row with different system name
                 if self.offset > 0:
-                    self.offset -= 1
-                    if self.route[self.offset][1] not in [None, "", []]:
-                        if not self.galaxy:
-                            self.jumps_left += int(self.route[self.offset][1])
-                        else:
-                            self.jumps_left += 1
+                    # Find previous row with different system name
+                    new_offset = self.offset
+                    while new_offset > 0:
+                        new_offset -= 1
+                        prev_system_name = self._get_system_name_at_index(new_offset)
+                        # Handle None case
+                        if prev_system_name is None:
+                            prev_system_name = ""
+                        # If we found a different system name, use it
+                        if prev_system_name != current_system_name:
+                            self.offset = new_offset
+                            # Add jumps for the new offset (if present)
+                            if self.fleetcarrier:
+                                # Fleet carrier routes: each row is 1 jump
+                                self.jumps_left += 1
+                            elif self.neutron:
+                                # Neutron routes: jumps are at index 3
+                                if len(self.route[self.offset]) > 3 and self.route[self.offset][3] not in [None, "", []]:
+                                    self.jumps_left += int(self.route[self.offset][3])
+                            elif self.galaxy:
+                                # Galaxy routes: each row is 1 jump
+                                self.jumps_left += 1
+                            else:
+                                # Generic routes: jumps are at index 1
+                                if len(self.route[self.offset]) > 1 and self.route[self.offset][1] not in [None, "", []]:
+                                    self.jumps_left += int(self.route[self.offset][1])
+                            break
+                    else:
+                        # Reached beginning without finding different system, stay at current
+                        pass
         except Exception:
             # If something odd in route contents, try to recover by resetting offset to 0
             logger.warning('!! ' + traceback.format_exc(), exc_info=False)
@@ -1290,19 +2081,203 @@ class GalaxyGPS():
             self.next_stop = "End of the road!"
             self.update_gui()
         else:
-            self.next_stop = self.route[self.offset][0]
-            self.update_bodies_text()
-            self.compute_distances()
+            # Get the system name for display (handling empty names for Road to Riches)
+            display_system_name = self._get_system_name_at_index(self.offset)
+            if display_system_name:
+                self.next_stop = display_system_name
+            else:
+                # Fallback to raw value if we can't determine system name
+                # For Road to Riches, if raw value is empty, look backwards for system name
+                raw_system = self.route[self.offset][0] if len(self.route[self.offset]) > 0 else ""
+                if not raw_system and self.roadtoriches and self.offset > 0:
+                    # Look backwards for the last non-empty system name
+                    for prev_idx in range(self.offset - 1, -1, -1):
+                        prev_system = self.route[prev_idx][0] if len(self.route[prev_idx]) > 0 else ""
+                        if prev_system and prev_system.strip():
+                            self.next_stop = prev_system.strip()
+                            break
+                    else:
+                        self.next_stop = raw_system if raw_system else ""
+                else:
+                    self.next_stop = raw_system if raw_system else ""
+
+            try:
+                self.update_bodies_text()
+            except Exception as e:
+                logger.warning(f'[update_route] Exception in update_bodies_text(): {e}', exc_info=True)
+
+            try:
+                self.compute_distances()
+            except Exception as e:
+                logger.warning(f'[update_route] Exception in compute_distances(): {e}', exc_info=True)
 
             if self.galaxy:
-                self.pleaserefuel = self.route[self.offset][1] == "Yes"
+                try:
+                    self.pleaserefuel = self.route[self.offset][1] == "Yes"
+                except Exception as e:
+                    logger.warning(f'[update_route] Exception setting pleaserefuel: {e}', exc_info=True)
             
             # Update fleet carrier restock warning when route changes
             if self.fleetcarrier:
-                self.check_fleet_carrier_restock_warning()
+                try:
+                    self.check_fleet_carrier_restock_warning()
+                except Exception as e:
+                    logger.warning(f'[update_route] Exception in check_fleet_carrier_restock_warning(): {e}', exc_info=True)
 
-            self.update_gui()
+            # Update GUI (this will update button text)
+            try:
+                self.update_gui()
+            except Exception as e:
+                logger.error(f'[update_route] Exception in update_gui(): {e}', exc_info=True)
+                raise  # Re-raise to see the full stack trace
+            
+            # CRITICAL: Explicitly update button text AFTER next_stop is set
+            # This is especially important for Road to Riches where system names might be empty
+            # Use the same method the window uses to ensure consistency
+            # Force update even if window is open (window operations shouldn't block this)
+            def update_button_text():
+                if hasattr(self, 'waypoint_btn') and hasattr(self, 'next_wp_label'):
+                    try:
+                        # Verify button widget is still valid (not destroyed)
+                        if not hasattr(self.waypoint_btn, 'winfo_exists') or not self.waypoint_btn.winfo_exists():
+                            logger.warning('[update_button_text] Button widget does not exist, skipping update')
+                            return  # Button was destroyed, can't update
+                        
+                        # Re-get the system name using the same method the window uses
+                        # This ensures button text matches what the window highlights
+                        if hasattr(self, '_get_system_name_at_index') and hasattr(self, 'offset') and hasattr(self, 'route'):
+                            # Ensure offset is still valid
+                            if self.offset >= 0 and self.offset < len(self.route):
+                                display_system_name = self._get_system_name_at_index(self.offset)
+                                if display_system_name:
+                                    current_next_stop = display_system_name
+                                else:
+                                    current_next_stop = self.next_stop if hasattr(self, 'next_stop') and self.next_stop else ""
+                            else:
+                                current_next_stop = self.next_stop if hasattr(self, 'next_stop') and self.next_stop else ""
+                        else:
+                            current_next_stop = self.next_stop if hasattr(self, 'next_stop') and self.next_stop else ""
+                        
+                        button_text = self.next_wp_label + '\n' + current_next_stop
+
+                        # Update using config() for more reliable updates
+                        # Use both config() and direct assignment to ensure it works
+                        self.waypoint_btn.config(text=button_text)
+                        self.waypoint_btn["text"] = button_text
+                        # Force immediate GUI update
+                        self.waypoint_btn.update_idletasks()
+                        # Also update the parent frame to ensure visibility
+                        if hasattr(self, 'frame'):
+                            self.frame.update_idletasks()
+                        # Force parent window update as well
+                        if hasattr(self, 'parent') and self.parent:
+                            self.parent.update_idletasks()
+                        
+                        # Verify the update actually took (log only on mismatch)
+                        actual_text = self.waypoint_btn.cget('text')
+                        if actual_text != button_text:
+                            logger.warning(f'[update_button_text] Button text mismatch! Expected: {button_text[:50]}..., Got: {actual_text[:50]}...')
+                    except (tk.TclError, AttributeError) as e:
+                        # Button was destroyed or invalid, skip update
+                        logger.warning(f'[update_button_text] TclError/AttributeError: {e}', exc_info=False)
+                    except Exception as e:
+                        logger.warning(f'[update_button_text] Error updating waypoint button text: {e}', exc_info=True)
+            
+            # Update immediately - use try/except to ensure it always happens
+            try:
+                update_button_text()
+            except Exception as e:
+                logger.warning(f'Error in immediate button text update: {e}', exc_info=False)
+            
+            # Also schedule multiple updates after delays to ensure it sticks
+            # This helps if window operations are interfering
+            if hasattr(self, 'parent') and self.parent:
+                try:
+                    self.parent.after(10, update_button_text)
+                    self.parent.after(50, update_button_text)
+                    self.parent.after(100, update_button_text)
+                    self.parent.after(200, update_button_text)
+                except Exception:
+                    pass
+            
             self.copy_waypoint()
+            
+            # CRITICAL: Validate route and offset after all operations
+            # This ensures they remain valid even if window operations interfere
+            if hasattr(self, 'route') and hasattr(self, 'offset'):
+                if self.offset < 0:
+                    self.offset = 0
+                if self.offset >= len(self.route):
+                    self.offset = len(self.route) - 1 if len(self.route) > 0 else 0
+                # Re-validate next_stop after offset validation
+                if self.offset < len(self.route):
+                    display_system_name = self._get_system_name_at_index(self.offset)
+                    if display_system_name:
+                        self.next_stop = display_system_name
+            
+            # Refresh route window if open to update highlighted waypoint
+            # Do this after all GUI updates to ensure consistency
+            try:
+                refresh_route_window_if_open(self)
+            except Exception as e:
+                logger.warning(f'Error refreshing route window: {e}', exc_info=False)
+            
+            # Final button text update after all operations complete
+            # Use after() to ensure this happens after any window operations
+            # Use the same method the window uses to get system name for consistency
+            if hasattr(self, 'parent') and hasattr(self, 'waypoint_btn') and hasattr(self, 'next_wp_label'):
+                def final_button_update():
+                    try:
+                        # Verify button widget is still valid (not destroyed)
+                        if not hasattr(self.waypoint_btn, 'winfo_exists') or not self.waypoint_btn.winfo_exists():
+                            logger.warning('[final_button_update] Button widget does not exist, skipping update')
+                            return  # Button was destroyed, can't update
+                        
+                        # Ensure route and offset are still valid
+                        if hasattr(self, 'route') and hasattr(self, 'offset'):
+                            if self.offset < 0 or self.offset >= len(self.route):
+                                # Offset is invalid, try to recover
+                                if len(self.route) > 0:
+                                    self.offset = max(0, min(self.offset, len(self.route) - 1))
+                                else:
+                                    return
+                        
+                        # Re-get the system name using the same method the window uses
+                        if hasattr(self, '_get_system_name_at_index') and hasattr(self, 'offset') and hasattr(self, 'route'):
+                            if self.offset >= 0 and self.offset < len(self.route):
+                                display_system_name = self._get_system_name_at_index(self.offset)
+                                if display_system_name:
+                                    current_next_stop = display_system_name
+                                else:
+                                    current_next_stop = self.next_stop if hasattr(self, 'next_stop') and self.next_stop else ""
+                            else:
+                                current_next_stop = self.next_stop if hasattr(self, 'next_stop') and self.next_stop else ""
+                        else:
+                            current_next_stop = self.next_stop if hasattr(self, 'next_stop') and self.next_stop else ""
+                        button_text = self.next_wp_label + '\n' + current_next_stop
+                        # Use both methods to ensure update
+                        self.waypoint_btn.config(text=button_text)
+                        self.waypoint_btn["text"] = button_text
+                        self.waypoint_btn.update_idletasks()
+                        
+                        # Verify the update (log only on mismatch)
+                        actual_text = self.waypoint_btn.cget('text')
+                        if actual_text != button_text:
+                            logger.warning(f'[final_button_update] Button text mismatch! Expected: {button_text[:50]}..., Got: {actual_text[:50]}...')
+                    except (tk.TclError, AttributeError) as e:
+                        # Button was destroyed or invalid, skip update
+                        logger.warning(f'[final_button_update] TclError/AttributeError: {e}', exc_info=False)
+                    except Exception as e:
+                        logger.warning(f'[final_button_update] Error in final button update: {e}', exc_info=True)
+                # Schedule multiple updates to ensure it sticks
+                # Use longer delays to ensure window creation has completed
+                if self.parent:
+                    try:
+                        self.parent.after(250, final_button_update)  # After window creation likely completes
+                        self.parent.after(500, final_button_update)  # Second attempt for safety
+                        self.parent.after(1000, final_button_update)  # Final fallback
+                    except Exception:
+                        pass
 
         self.save_offset()
 
@@ -1346,10 +2321,8 @@ class GalaxyGPS():
                     # Check fleet carrier restock warning
                     if self.fleetcarrier and hasattr(self, 'check_fleet_carrier_restock_warning'):
                         self.check_fleet_carrier_restock_warning()
-                    # Only save route if we don't have an original CSV to preserve (for non-fleet-carrier routes)
-                    # For fleet carrier routes, we still save because they're processed differently
-                    if not self.original_csv_path or self.fleetcarrier:
-                        self.save_all_route()
+                    # Save route to cache (now preserves all columns via route_full_data)
+                    self.save_all_route()
                 else:
                     self.show_error("Unsupported file type")
             except Exception:
@@ -1362,6 +2335,7 @@ class GalaxyGPS():
             self.roadtoriches = False
             self.fleetcarrier = False
             self.galaxy = False
+            self.neutron = False
 
             if clear_previous_route:
                 self.clear_route(False)
@@ -1392,8 +2366,8 @@ class GalaxyGPS():
             internalbasicheader1 = "System Name"
             internalbasicheader2 = "System Name,Jumps"
             internalrichesheader = "System Name,Jumps,Body Name,Body Subtype"
-            internalfleetcarrierheader_with_distances = "System Name,Jumps,Distance To Arrival,Distance Remaining,Restock Tritium"
-            internalfleetcarrierheader = "System Name,Jumps,Restock Tritium"
+            internalfleetcarrierheader_with_distances = "System Name,Distance,Distance Remaining,Tritium in tank,Tritium in market,Fuel Used,Icy Ring,Pristine,Restock Tritium"
+            internalfleetcarrierheader = "System Name,Distance,Distance Remaining,Tritium in tank,Tritium in market,Fuel Used,Icy Ring,Pristine,Restock Tritium"
             internalgalaxyheader = "System Name,Refuel"
             neutronimportheader = "System Name,Distance To Arrival,Distance Remaining,Neutron Star,Jumps"
             road2richesimportheader = "System Name,Body Name,Body Subtype,Is Terraformable,Distance To Arrival,Estimated Scan Value,Estimated Mapping Value,Jumps"
@@ -1420,6 +2394,8 @@ class GalaxyGPS():
 
             # --- neutron import ---
             if headerline_lower == neutronimportheader.lower():
+                self.neutron = True  # Flag neutron routes for special cumulative jump handling
+                logger.info(f"[plot_csv] Importing neutron route with headers: {fieldnames}")
                 for row in route_reader:
                     if row not in (None, "", []):
                         # Store full row data (all columns)
@@ -1429,21 +2405,30 @@ class GalaxyGPS():
                         self.route_full_data.append(full_row_data)
                         
                         # Store minimal route data for route planner
+                        # Neutron format: [System Name, Distance To Arrival, Distance Remaining, Jumps]
                         dist_to_arrival, dist_remaining = get_distance_fields(row)
-                        self.route.append([
+                        jumps_value = get_field(row, self.jumps_header, "")
+                        route_row = [
                             get_field(row, self.system_header),
-                            get_field(row, self.jumps_header, ""),
                             dist_to_arrival,
-                            dist_remaining
-                        ])
+                            dist_remaining,
+                            jumps_value
+                        ]
+                        self.route.append(route_row)
+                        logger.debug(f"[plot_csv] Neutron row: {route_row}")
                         try:
                             jumps_val = get_field(row, self.jumps_header, "0")
                             self.jumps_left += int(jumps_val)
                         except (ValueError, TypeError):
                             pass
 
+            # --- Check for Road to Riches import ---
+            if headerline_lower == road2richesimportheader.lower():
+                self.roadtoriches = True
+                logger.info(f"[plot_csv] Detected Road to Riches route with headers: {fieldnames}")
+
             # --- simple internal ---
-            elif headerline_lower in (internalbasicheader1.lower(), internalbasicheader2.lower()):
+            if headerline_lower in (internalbasicheader1.lower(), internalbasicheader2.lower()):
                 for row in route_reader:
                     if row not in (None, "", []):
                         # Store full row data (all columns)
@@ -1466,6 +2451,7 @@ class GalaxyGPS():
             # --- internal fleetcarrier WITH distances (load after restart) ---
             elif headerline_lower == internalfleetcarrierheader_with_distances.lower():
                 self.fleetcarrier = True
+                self.has_fuel_used = has_field('Fuel Used')
 
                 for row in route_reader:
                     if row not in (None, "", []):
@@ -1476,23 +2462,44 @@ class GalaxyGPS():
                         self.route_full_data.append(full_row_data)
                         
                         # Store minimal route data for route planner
+                        # Fleet Carrier format: [System Name, Distance, Distance Remaining, Tritium in tank, Tritium in market, Fuel Used, Icy Ring, Pristine, Restock Tritium]
                         dist_to_arrival, dist_remaining = get_distance_fields(row)
-                        self.route.append([
-                            get_field(row, self.system_header),
-                            get_field(row, self.jumps_header),
-                            dist_to_arrival,
-                            dist_remaining,
-                            get_field(row, self.restocktritium_header, "")
-                        ])
-                        try:
-                            jumps_val = get_field(row, self.jumps_header, "0")
-                            self.jumps_left += int(jumps_val)
-                        except (ValueError, TypeError):
-                            pass
+                        
+                        route_entry = [
+                            get_field(row, self.system_header),                    # 0: System Name
+                            dist_to_arrival,                                       # 1: Distance
+                            dist_remaining,                                        # 2: Distance Remaining
+                            get_field(row, 'Tritium in tank', ''),                # 3: Tritium in tank
+                            get_field(row, 'Tritium in market', ''),              # 4: Tritium in market
+                        ]
+                        
+                        # Add Fuel Used if present
+                        if self.has_fuel_used:
+                            fuel_used_raw = get_field(row, 'Fuel Used', '')
+                            if fuel_used_raw:
+                                try:
+                                    val = float(fuel_used_raw)
+                                    rounded_val = math.ceil(val * 100) / 100
+                                    route_entry.append(f"{rounded_val:.2f}")       # 5: Fuel Used
+                                except (ValueError, TypeError):
+                                    route_entry.append(fuel_used_raw)
+                            else:
+                                route_entry.append('')
+                        else:
+                            route_entry.append('')  # 5: Fuel Used placeholder
+                        
+                        route_entry.append(get_field(row, 'Icy Ring', ''))        # 6: Icy Ring
+                        route_entry.append(get_field(row, 'Pristine', ''))        # 7: Pristine
+                        route_entry.append(get_field(row, self.restocktritium_header, ''))  # 8: Restock Tritium
+                        
+                        self.route.append(route_entry)
+                        # For internal format with distances, each row is 1 jump
+                        self.jumps_left += 1
 
             # --- internal fleetcarrier (legacy, no distances) ---
             elif headerline_lower == internalfleetcarrierheader.lower():
                 self.fleetcarrier = True
+                self.has_fuel_used = has_field('Fuel Used')
 
                 for row in route_reader:
                     if row not in (None, "", []):
@@ -1503,16 +2510,37 @@ class GalaxyGPS():
                         self.route_full_data.append(full_row_data)
                         
                         # Store minimal route data for route planner
-                        self.route.append([
-                            get_field(row, self.system_header),
-                            get_field(row, self.jumps_header),
-                            get_field(row, self.restocktritium_header)
-                        ])
-                        try:
-                            jumps_val = get_field(row, self.jumps_header, "0")
-                            self.jumps_left += int(jumps_val)
-                        except (ValueError, TypeError):
-                            pass
+                        # Fleet Carrier format: [System Name, Distance, Distance Remaining, Tritium in tank, Tritium in market, Fuel Used, Icy Ring, Pristine, Restock Tritium]
+                        route_entry = [
+                            get_field(row, self.system_header),                    # 0: System Name
+                            "",                                                    # 1: Distance (placeholder)
+                            "",                                                    # 2: Distance Remaining (placeholder)
+                            get_field(row, 'Tritium in tank', ''),                # 3: Tritium in tank
+                            get_field(row, 'Tritium in market', ''),              # 4: Tritium in market
+                        ]
+                        
+                        # Add Fuel Used if present
+                        if self.has_fuel_used:
+                            fuel_used_raw = get_field(row, 'Fuel Used', '')
+                            if fuel_used_raw:
+                                try:
+                                    val = float(fuel_used_raw)
+                                    rounded_val = math.ceil(val * 100) / 100
+                                    route_entry.append(f"{rounded_val:.2f}")       # 5: Fuel Used
+                                except (ValueError, TypeError):
+                                    route_entry.append(fuel_used_raw)
+                            else:
+                                route_entry.append('')
+                        else:
+                            route_entry.append('')  # 5: Fuel Used placeholder
+                        
+                        route_entry.append(get_field(row, 'Icy Ring', ''))        # 6: Icy Ring
+                        route_entry.append(get_field(row, 'Pristine', ''))        # 7: Pristine
+                        route_entry.append(get_field(row, self.restocktritium_header, ''))  # 8: Restock Tritium
+                        
+                        self.route.append(route_entry)
+                        # Legacy format, each row is 1 jump
+                        self.jumps_left += 1
 
             # --- EXTERNAL fleetcarrier import (WITH LY SUPPORT) ---
             elif headerline_lower == fleetcarrierimportheader.lower():
@@ -1538,15 +2566,17 @@ class GalaxyGPS():
                         self.route_full_data.append(full_row_data)
                         
                         # Store minimal route data for route planner
+                        # Fleet Carrier format: [System Name, Distance, Distance Remaining, Tritium in tank, Tritium in market, Fuel Used, Icy Ring, Pristine, Restock Tritium]
                         dist_to_arrival, dist_remaining = get_distance_fields(row)
 
                         route_entry = [
-                            get_field(row, self.system_header),
-                            1,  # every row = one carrier jump
-                            dist_to_arrival,
-                            dist_remaining,
-                            get_field(row, self.restocktritium_header, "")
+                            get_field(row, self.system_header),                    # 0: System Name
+                            dist_to_arrival,                                       # 1: Distance
+                            dist_remaining,                                        # 2: Distance Remaining
+                            get_field(row, 'Tritium in tank', ''),                # 3: Tritium in tank
+                            get_field(row, 'Tritium in market', ''),              # 4: Tritium in market
                         ]
+                        
                         # Store Fuel Used if present (round UP to nearest hundredth)
                         if self.has_fuel_used:
                             fuel_used_raw = get_field(row, 'Fuel Used', '')
@@ -1554,16 +2584,26 @@ class GalaxyGPS():
                                 try:
                                     val = float(fuel_used_raw)
                                     rounded_val = math.ceil(val * 100) / 100
-                                    route_entry.append(f"{rounded_val:.2f}")
+                                    route_entry.append(f"{rounded_val:.2f}")       # 5: Fuel Used
                                 except (ValueError, TypeError):
                                     route_entry.append(fuel_used_raw)
                             else:
                                 route_entry.append('')
+                        else:
+                            route_entry.append('')  # 5: Fuel Used placeholder
+                        
                         # Store Icy Ring and Pristine if present (for route view window)
                         if has_field('Icy Ring'):
-                            route_entry.append(get_field(row, 'Icy Ring', ''))
+                            route_entry.append(get_field(row, 'Icy Ring', ''))    # 6: Icy Ring
+                        else:
+                            route_entry.append('')
+                        
                         if has_field('Pristine'):
-                            route_entry.append(get_field(row, 'Pristine', ''))
+                            route_entry.append(get_field(row, 'Pristine', ''))    # 7: Pristine
+                        else:
+                            route_entry.append('')
+                        
+                        route_entry.append(get_field(row, self.restocktritium_header, ''))  # 8: Restock Tritium
                         
                         self.route.append(route_entry)
                         self.jumps_left += 1
@@ -1572,6 +2612,7 @@ class GalaxyGPS():
             elif has_field("Refuel") and has_field(self.system_header):
                 self.galaxy = True
                 self.has_fuel_used = has_field('Fuel Used')
+                has_fuel_left = has_field('Fuel Left')
 
                 for row in route_reader:
                     if row not in (None, "", []):
@@ -1602,8 +2643,24 @@ class GalaxyGPS():
                         if dist_to_arrival or dist_remaining:
                             route_row.append(dist_to_arrival)
                             route_row.append(dist_remaining)
+                            
+                            # Store Fuel Left if present at index 4 (round UP to nearest hundredth)
+                            if has_fuel_left:
+                                fuel_left_raw = get_field(row, 'Fuel Left', '')
+                                if fuel_left_raw:
+                                    try:
+                                        val = float(fuel_left_raw)
+                                        rounded_val = math.ceil(val * 100) / 100
+                                        route_row.append(f"{rounded_val:.2f}")
+                                    except (ValueError, TypeError):
+                                        route_row.append(fuel_left_raw)
+                                else:
+                                    route_row.append('')
+                            else:
+                                # No Fuel Left column - add empty placeholder
+                                route_row.append("")
                         
-                        # Store Fuel Used if present (round UP to nearest hundredth)
+                        # Store Fuel Used if present at index 5 (round UP to nearest hundredth)
                         if self.has_fuel_used:
                             fuel_used_raw = get_field(row, 'Fuel Used', '')
                             if fuel_used_raw:
@@ -1649,300 +2706,315 @@ class GalaxyGPS():
                         
                         # Store minimal route data for route planner
                         system = get_field(row, self.system_header, "")
-                        jumps = get_field(row, self.jumps_header, "")
-                        route_entry = [system, jumps]
                         
-                        # Add Fuel Used if present (round UP to nearest hundredth)
-                        if self.has_fuel_used:
-                            fuel_used_raw = get_field(row, 'Fuel Used', '')
-                            if fuel_used_raw:
-                                try:
-                                    val = float(fuel_used_raw)
-                                    rounded_val = math.ceil(val * 100) / 100
-                                    route_entry.append(f"{rounded_val:.2f}")
-                                except (ValueError, TypeError):
-                                    route_entry.append(fuel_used_raw)
+                        # For fleet carrier routes, use the new format
+                        if self.fleetcarrier:
+                            # Fleet Carrier format: [System Name, Distance, Distance Remaining, Tritium in tank, Tritium in market, Fuel Used, Icy Ring, Pristine, Restock Tritium]
+                            dist_to_arrival, dist_remaining = get_distance_fields(row)
+                            route_entry = [
+                                system,                                            # 0: System Name
+                                dist_to_arrival if dist_to_arrival else "",        # 1: Distance
+                                dist_remaining if dist_remaining else "",          # 2: Distance Remaining
+                                get_field(row, 'Tritium in tank', ''),            # 3: Tritium in tank
+                                get_field(row, 'Tritium in market', ''),          # 4: Tritium in market
+                            ]
+                            
+                            # Add Fuel Used if present (round UP to nearest hundredth)
+                            if self.has_fuel_used:
+                                fuel_used_raw = get_field(row, 'Fuel Used', '')
+                                if fuel_used_raw:
+                                    try:
+                                        val = float(fuel_used_raw)
+                                        rounded_val = math.ceil(val * 100) / 100
+                                        route_entry.append(f"{rounded_val:.2f}")   # 5: Fuel Used
+                                    except (ValueError, TypeError):
+                                        route_entry.append(fuel_used_raw)
+                                else:
+                                    route_entry.append('')
+                            else:
+                                route_entry.append('')  # 5: Fuel Used placeholder
+                            
+                            # Add Icy Ring and Pristine if present
+                            if has_icy_ring_in_file:
+                                route_entry.append(get_field(row, 'Icy Ring', ''))  # 6: Icy Ring
                             else:
                                 route_entry.append('')
-                        
-                        # Add Icy Ring and Pristine if present
-                        if has_icy_ring_in_file:
-                            route_entry.append(get_field(row, 'Icy Ring', ''))
-                        if has_pristine_in_file:
-                            route_entry.append(get_field(row, 'Pristine', ''))
-                        
-                        self.route.append(route_entry)
-                        try:
-                            self.jumps_left += int(jumps) if jumps else 0
-                        except (ValueError, TypeError):
-                            pass
+                            
+                            if has_pristine_in_file:
+                                route_entry.append(get_field(row, 'Pristine', ''))  # 7: Pristine
+                            else:
+                                route_entry.append('')
+                            
+                            route_entry.append(get_field(row, self.restocktritium_header, ''))  # 8: Restock Tritium
+                            
+                            self.route.append(route_entry)
+                            self.jumps_left += 1
+                        else:
+                            # Generic route format: [System, Jumps, Fuel Used?, ...]
+                            jumps = get_field(row, self.jumps_header, "")
+                            route_entry = [system, jumps]
+                            
+                            # Add Fuel Used if present (round UP to nearest hundredth)
+                            if self.has_fuel_used:
+                                fuel_used_raw = get_field(row, 'Fuel Used', '')
+                                if fuel_used_raw:
+                                    try:
+                                        val = float(fuel_used_raw)
+                                        rounded_val = math.ceil(val * 100) / 100
+                                        route_entry.append(f"{rounded_val:.2f}")
+                                    except (ValueError, TypeError):
+                                        route_entry.append(fuel_used_raw)
+                                else:
+                                    route_entry.append('')
+                            
+                            self.route.append(route_entry)
+                            try:
+                                self.jumps_left += int(jumps) if jumps else 0
+                            except (ValueError, TypeError):
+                                pass
 
             if self.route:
                 # Find where we are in the route based on current system location
                 self.offset = self.find_current_waypoint_in_route()
                 
                 self.next_stop = self.route[self.offset][0]
+                self.update_bodies_text()  # Update bodies text for Road to Riches routes
                 self.compute_distances()
                 self.update_gui()
                 # Check fleet carrier restock warning
                 if self.fleetcarrier and hasattr(self, 'check_fleet_carrier_restock_warning'):
                     self.check_fleet_carrier_restock_warning()
 
-    def plot_route(self):
-        self.hide_error()
+    def _run_plot_route_worker(self, source, dest, efficiency, range_ly, supercharge_multiplier):
+        """Worker: run Spansh HTTP + poll + parse off main thread, put result in queue."""
+        def put_error(err, source_red=False, dest_red=False):
+            self._route_queue.put({
+                'ok': False, 'error': err, 'source_red': source_red, 'dest_red': dest_red,
+            })
+
         try:
-            source = self.source_ac.get().strip()
-            dest = self.dest_ac.get().strip()
-            efficiency = self.efficiency_slider.get()
-
-            # Hide autocomplete lists
-            self.source_ac.hide_list()
-            self.dest_ac.hide_list()
-
-            # Validate inputs
-            if not source or source == self.source_ac.placeholder:
-                self.show_error("Please provide a starting system.")
-                return
-            if not dest or dest == self.dest_ac.placeholder:
-                self.show_error("Please provide a destination system.")
-                return
-
-            # Range
-            try:
-                range_ly = float(self.range_entry.get())
-            except ValueError:
-                self.show_error("Invalid range")
-                return
-
             job_url = "https://spansh.co.uk/api/route?"
-
-            # Submit plot request
+            session = timeout_session.new_session()
+            session.headers['User-Agent'] = user_agent + ' GalaxyGPS'
             try:
-                supercharge_multiplier = 6 if self.supercharge_overcharge.get() else 4
-
-                results = requests.post(
+                results = session.post(
                     job_url,
                     params={
                         "efficiency": efficiency,
                         "range": range_ly,
                         "from": source,
                         "to": dest,
-                        # Spansh neutron routing:
-                        # 4 = normal supercharge
-                        # 6 = overcharge supercharge
-                        "supercharge_multiplier": supercharge_multiplier
+                        "supercharge_multiplier": supercharge_multiplier,
                     },
-                    headers={'User-Agent': "EDMC_GalaxyGPS 1.0"}
+                    timeout=30,
                 )
             except Exception as e:
                 logger.warning(f"Failed to submit route query: {e}")
-                self.show_error(self.plot_error)
+                put_error(self.plot_error)
                 return
 
-            # Spansh returned immediate error
             if results.status_code != 202:
                 logger.warning(
                     f"Failed to query plotted route from Spansh: "
                     f"{results.status_code}; text: {results.text}"
                 )
-
                 try:
                     failure = json.loads(results.content)
                 except (json.JSONDecodeError, ValueError):
                     failure = {}
-
-                if results.status_code == 400 and "error" in failure:
-                    self.show_error(failure["error"])
-                    if "starting system" in failure["error"]:
-                        self.source_ac["fg"] = "red"
-                    if "finishing system" in failure["error"]:
-                        self.dest_ac["fg"] = "red"
-                else:
-                    self.show_error(self.plot_error)
+                err = failure.get("error", self.plot_error) if results.status_code == 400 else self.plot_error
+                source_red = bool(results.status_code == 400 and "error" in failure and "starting system" in failure["error"])
+                dest_red = bool(results.status_code == 400 and "error" in failure and "finishing system" in failure["error"])
+                put_error(err, source_red, dest_red)
                 return
 
-            # Otherwise: accepted, poll job state
-            self.enable_plot_gui(False)
             try:
                 response = json.loads(results.content)
             except (json.JSONDecodeError, ValueError) as e:
                 logger.warning(f"Failed to parse Spansh response: {e}")
-                self.enable_plot_gui(True)
-                self.show_error("Invalid response from Spansh. Please try again.")
+                put_error("Invalid response from Spansh. Please try again.")
                 return
-            
+
             job = response.get("job")
             if not job:
                 logger.warning("No job ID in Spansh response")
-                self.enable_plot_gui(True)
-                self.show_error("Failed to start route calculation. Please try again.")
+                put_error("Failed to start route calculation. Please try again.")
                 return
-            
+
             tries = 0
             route_response = None
-
             while tries < 20:
-                results_url = f"https://spansh.co.uk/api/results/{job}"
-
                 try:
-                    route_response = requests.get(results_url, timeout=5)
+                    route_response = session.get(
+                        f"https://spansh.co.uk/api/results/{job}",
+                        timeout=5,
+                    )
                 except (requests.RequestException, requests.Timeout) as e:
                     logger.warning(f"Error polling Spansh results: {e}")
                     route_response = None
                     break
-
                 if route_response.status_code != 202:
                     break
-
                 tries += 1
                 sleep(1)
 
-            # Did we get a real final response?
             if not route_response:
                 logger.warning("Query to Spansh timed out")
-                self.enable_plot_gui(True)
-                self.show_error("The query to Spansh timed out. Please try again.")
+                put_error("The query to Spansh timed out. Please try again.")
                 return
 
-            # Final response OK
             if route_response.status_code == 200:
                 try:
                     response_data = json.loads(route_response.content)
                     if "result" not in response_data or "system_jumps" not in response_data["result"]:
                         logger.warning(f"Unexpected Spansh response structure: {response_data}")
-                        self.enable_plot_gui(True)
-                        self.show_error("Invalid route data from Spansh. Please try again.")
+                        put_error("Invalid route data from Spansh. Please try again.")
                         return
                     route = response_data["result"]["system_jumps"]
                 except (json.JSONDecodeError, ValueError, KeyError) as e:
                     logger.warning(f"Invalid data from Spansh: {e}")
-                    self.enable_plot_gui(True)
-                    self.show_error(self.plot_error)
+                    put_error(self.plot_error)
                     return
 
                 if not route or len(route) == 0:
                     logger.warning("Empty route returned from Spansh")
-                    self.enable_plot_gui(True)
-                    self.show_error("No route found between the specified systems.")
+                    put_error("No route found between the specified systems.")
                     return
 
-                # Clear previous route silently
-                self.clear_route(show_dialog=False)
-
-                # Fill route with distance-aware entries (API plot)
-                # Also store full data for View Route window
-                self.route_full_data = []
-                self.route_fieldnames = ['System Name', 'Jumps', 'Distance To Arrival', 'Distance Remaining']  # Standard Spansh API columns
+                route_rows = []
+                route_full_data = []
+                route_fieldnames = ['System Name', 'Jumps', 'Distance To Arrival', 'Distance Remaining']
+                jumps_left = 0
                 for waypoint in route:
                     system = waypoint.get("system", "")
                     jumps = waypoint.get("jumps", 0)
-
-                    # Map API distance fields to internal format
-                    distance_to_arrival_raw = waypoint.get("distance_jumped", "")
-                    distance_remaining_raw = waypoint.get("distance_left", "")
-                    
-                    # Round distance values UP to nearest hundredth (2 decimal places)
-                    def round_distance(val):
-                        if not val or val == "":
-                            return ""
-                        try:
-                            val_float = float(val)
-                            # Round UP to nearest hundredth: multiply by 100, ceil, divide by 100
-                            rounded = math.ceil(val_float * 100) / 100
-                            return f"{rounded:.2f}"
-                        except (ValueError, TypeError):
-                            return val  # Return as-is if not a number
-                    
-                    distance_to_arrival = round_distance(distance_to_arrival_raw)
-                    distance_remaining = round_distance(distance_remaining_raw)
-
-                    # Store minimal route data for route planner
-                    self.route.append([
-                        system,
-                        str(jumps),
-                        distance_to_arrival,
-                        distance_remaining
-                    ])
-                    
-                    # Store full data for View Route window (all API fields)
+                    distance_to_arrival = _round_distance(waypoint.get("distance_jumped", ""))
+                    distance_remaining = _round_distance(waypoint.get("distance_left", ""))
+                    route_rows.append([system, str(jumps), distance_to_arrival, distance_remaining])
                     full_row_data = {
                         'system name': system,
                         'jumps': str(jumps),
                         'distance to arrival': distance_to_arrival,
-                        'distance remaining': distance_remaining
+                        'distance remaining': distance_remaining,
                     }
-                    # Include any other fields from API response
                     for key, value in waypoint.items():
                         if key not in ['system', 'jumps', 'distance_jumped', 'distance_left']:
                             field_name = key.lower().replace('_', ' ')
                             full_row_data[field_name] = str(value) if value else ''
-                            # Add to fieldnames if not already present
                             display_name = key.replace('_', ' ').title()
-                            if display_name not in self.route_fieldnames:
-                                self.route_fieldnames.append(display_name)
-                    self.route_full_data.append(full_row_data)
-
+                            if display_name not in route_fieldnames:
+                                route_fieldnames.append(display_name)
+                    route_full_data.append(full_row_data)
                     try:
-                        self.jumps_left += int(jumps)
+                        jumps_left += int(jumps)
                     except (ValueError, TypeError):
                         pass
 
-                if len(self.route) == 0:
-                    logger.warning("Route list is empty after processing")
-                    self.enable_plot_gui(True)
-                    self.show_error("Failed to process route data. Please try again.")
+                if len(route_rows) == 0:
+                    put_error("Failed to process route data. Please try again.")
                     return
 
-                self.enable_plot_gui(True)
-                self.show_plot_gui(False)
-
-                # Compute offset
-                current_system = monitor.state.get('SystemName')
-                self.offset = (
-                    1
-                    if self.route and current_system and self.route[0][0].lower() == current_system.lower()
-                    else 0
-                )
-                self.next_stop = self.route[self.offset][0] if self.route else ""
-
-                # Update GUI and persist
-                self.compute_distances()
-                self.copy_waypoint()
-                self.update_gui()
-                # Refresh route window if open to update highlight
-                self.refresh_route_window_if_open()
-                # Check fleet carrier restock warning
-                if self.fleetcarrier and hasattr(self, 'check_fleet_carrier_restock_warning'):
-                    self.check_fleet_carrier_restock_warning()
-                self.save_all_route()
-                logger.info(f"Route calculated successfully: {len(self.route)} waypoints")
+                self._route_queue.put({
+                    'ok': True,
+                    'route': route_rows,
+                    'route_full_data': route_full_data,
+                    'route_fieldnames': route_fieldnames,
+                    'jumps_left': jumps_left,
+                })
                 return
 
-            # Otherwise: Spansh error on final poll
             logger.warning(
                 f"Failed final route fetch: {route_response.status_code}; "
                 f"text: {route_response.text}"
             )
-
             try:
-                failure = json.loads(results.content)
+                failure = json.loads(route_response.content)
             except (json.JSONDecodeError, ValueError):
                 failure = {}
-
-            self.enable_plot_gui(True)
+            err = self.plot_error
+            source_red = dest_red = False
             if route_response.status_code == 400 and "error" in failure:
-                self.show_error(failure["error"])
-                if "starting system" in failure["error"]:
-                    self.source_ac["fg"] = "red"
-                if "finishing system" in failure["error"]:
-                    self.dest_ac["fg"] = "red"
-            else:
-                self.show_error(self.plot_error)
+                err = failure["error"]
+                source_red = "starting system" in failure["error"]
+                dest_red = "finishing system" in failure["error"]
+            put_error(err, source_red, dest_red)
 
         except Exception:
             logger.warning('!! ' + traceback.format_exc(), exc_info=False)
-            self.enable_plot_gui(True)
-            self.show_error(self.plot_error)
+            put_error(self.plot_error)
+
+    def _poll_route_result(self):
+        """Main-thread polling: when worker puts result, apply it and update UI."""
+        if getattr(config, 'shutting_down', False):
+            return
+        try:
+            r = self._route_queue.get_nowait()
+        except queue.Empty:
+            self.frame.after(200, self._poll_route_result)
+            return
+
+        self.enable_plot_gui(True)
+        if not r['ok']:
+            self.show_error(r['error'])
+            if r.get('source_red') and hasattr(self, 'source_ac'):
+                self.source_ac["fg"] = "red"
+            if r.get('dest_red') and hasattr(self, 'dest_ac'):
+                self.dest_ac["fg"] = "red"
+            return
+
+        self.clear_route(show_dialog=False)
+        self.route = r['route']
+        self.route_full_data = r['route_full_data']
+        self.route_fieldnames = r['route_fieldnames']
+        self.jumps_left = r['jumps_left']
+
+        self.show_plot_gui(False)
+        current_system = monitor.state.get('SystemName') if monitor and hasattr(monitor, 'state') else None
+        self.offset = (
+            1
+            if self.route and current_system and self.route[0][0].lower() == current_system.lower()
+            else 0
+        )
+        self.next_stop = self.route[self.offset][0] if self.route else ""
+        self.compute_distances()
+        self.copy_waypoint()
+        self.update_gui()
+        self.refresh_route_window_if_open()
+        if self.fleetcarrier and hasattr(self, 'check_fleet_carrier_restock_warning'):
+            self.check_fleet_carrier_restock_warning()
+        self.save_all_route()
+        logger.info(f"Route calculated successfully: {len(self.route)} waypoints")
+
+    def plot_route(self):
+        self.hide_error()
+        source = self.source_ac.get().strip()
+        dest = self.dest_ac.get().strip()
+        efficiency = self.efficiency_slider.get()
+
+        self.source_ac.hide_list()
+        self.dest_ac.hide_list()
+
+        if not source or source == self.source_ac.placeholder:
+            self.show_error("Please provide a starting system.")
+            return
+        if not dest or dest == self.dest_ac.placeholder:
+            # LANG: Warning when destination system is missing in route planner
+            self.show_error(plugin_tl("Please provide a destination system."))
+            return
+        try:
+            range_ly = float(self.range_entry.get())
+        except ValueError:
+            self.show_error("Invalid range")
+            return
+
+        supercharge_multiplier = 6 if self.supercharge_overcharge.get() else 4
+        self.enable_plot_gui(False)
+        threading.Thread(
+            target=self._run_plot_route_worker,
+            args=(source, dest, efficiency, range_ly, supercharge_multiplier),
+            daemon=True,
+        ).start()
+        self.frame.after(200, self._poll_route_result)
 
     def plot_edts(self, filename):
         try:
@@ -1971,7 +3043,7 @@ class GalaxyGPS():
 
     def export_route(self):
         if len(self.route) == 0:
-            logger.info("No route to export")
+            logger.debug("No route to export")
             return
 
         route_start = self.route[0][0]
@@ -1992,7 +3064,8 @@ class GalaxyGPS():
                 self.show_error("An error occured while writing the file.")
 
     def clear_route(self, show_dialog=True):
-        clear = confirmDialog.askyesno("GalaxyGPS","Are you sure you want to clear the current route?") if show_dialog else True
+        # LANG: Confirmation dialog for clearing route
+        clear = askyesno(self.parent, "GalaxyGPS", plugin_tl("Are you sure you want to clear the current route?")) if show_dialog else True
 
         if clear:
             self.offset = 0
@@ -2004,15 +3077,16 @@ class GalaxyGPS():
             self.roadtoriches = False
             self.fleetcarrier = False
             self.galaxy = False
+            self.neutron = False
             self.original_csv_path = None  # Clear original CSV path reference
             try:
                 os.remove(self.save_route_path)
             except (IOError, OSError):
-                logger.info("No route to delete")
+                logger.debug("No route to delete")
             try:
                 os.remove(self.offset_file_path)
             except (IOError, OSError):
-                logger.info("No offset file to delete")
+                logger.debug("No offset file to delete")
 
             self.update_gui()
 
@@ -2021,6 +3095,11 @@ class GalaxyGPS():
         self.save_offset()
 
     def save_route(self):
+        """
+        Save route to CSV cache file.
+        Uses route_full_data if available to preserve ALL original columns,
+        otherwise falls back to saving self.route with appropriate headers.
+        """
         if len(self.route) == 0:
             try:
                 os.remove(self.save_route_path)
@@ -2029,6 +3108,23 @@ class GalaxyGPS():
             return
 
         try:
+            # PRIORITY 1: Use route_full_data if available (preserves ALL original columns)
+            if self.route_full_data and len(self.route_full_data) > 0 and self.route_fieldnames:
+                with open(self.save_route_path, 'w', encoding='utf-8-sig', newline='') as csvfile:
+                    writer = csv.DictWriter(csvfile, fieldnames=self.route_fieldnames)
+                    writer.writeheader()
+                    for row_data in self.route_full_data:
+                        # Convert lowercase keys back to original fieldnames for writing
+                        row_to_write = {}
+                        for original_fieldname in self.route_fieldnames:
+                            lowercase_key = original_fieldname.lower()
+                            row_to_write[original_fieldname] = row_data.get(lowercase_key, '')
+                        writer.writerow(row_to_write)
+                return
+
+            # FALLBACK: Use self.route with appropriate headers based on route type
+            # This path is only used if route_full_data is not available
+            
             # --- Road to riches ---
             if self.roadtoriches:
                 fieldnames = [
@@ -2169,19 +3265,81 @@ class GalaxyGPS():
             try:
                 os.remove(self.offset_file_path)
             except (IOError, OSError):
-                logger.info("No offset to delete")
+                logger.debug("No offset to delete")
 
     def update_bodies_text(self):
-        if not self.roadtoriches: return
+        if not self.roadtoriches: 
+            logger.debug(f"[update_bodies_text] Not a Road to Riches route, skipping")
+            return
 
         # For the bodies to scan use the current system, which is one before the next stop
         lastsystemoffset = self.offset - 1
         if lastsystemoffset < 0:
             lastsystemoffset = 0 # Display bodies of the first system
 
-        lastsystem = self.route[lastsystemoffset][0]
-        bodynames = self.route[lastsystemoffset][2]
-        bodysubtypes = self.route[lastsystemoffset][3]
+        logger.debug(f"[update_bodies_text] lastsystemoffset={lastsystemoffset}, route length={len(self.route)}")
+
+        # Validate that the route entry has the required indices for Road to Riches
+        # Road to Riches routes should have: [0]=system, [1]=jumps, [2]=bodynames, [3]=bodysubtypes
+        # But external Road to Riches CSVs might have a different structure
+        if lastsystemoffset >= len(self.route):
+            logger.warning(f'[update_bodies_text] lastsystemoffset ({lastsystemoffset}) >= route length ({len(self.route)})')
+            return
+        
+        route_entry = self.route[lastsystemoffset]
+        
+        # Get the system name to count bodies for
+        lastsystem = route_entry[0] if len(route_entry) > 0 else None
+        if not lastsystem:
+            logger.debug(f"[update_bodies_text] No system name at offset {lastsystemoffset}")
+            self.bodies = ""
+            return
+        
+        logger.debug(f"[update_bodies_text] Counting bodies for system: {lastsystem}")
+        
+        # Count how many rows in the route have the same system name as lastsystem
+        body_count = 0
+        for row in self.route:
+            if len(row) > 0:
+                system_name = row[0] if row[0] else ""
+                if system_name and system_name.lower() == lastsystem.lower():
+                    body_count += 1
+        
+        logger.debug(f"[update_bodies_text] Body count for {lastsystem}: {body_count}")
+        
+        # Display the count
+        if body_count > 0:
+            bodies_text = f"{body_count}"
+        else:
+            bodies_text = "0"
+        
+        if len(route_entry) < 4:
+            # Road to Riches route entry doesn't have bodynames/bodysubtypes
+            # This can happen with external Road to Riches CSVs that have a different structure
+            logger.debug(f"[update_bodies_text] Route entry too short ({len(route_entry)}), showing count only")
+            self.bodies = bodies_text  # Just show the count
+            return
+
+        bodynames = route_entry[2]
+        bodysubtypes = route_entry[3]
+        
+        # Validate that bodynames and bodysubtypes are lists/iterables
+        if not isinstance(bodynames, (list, tuple)) or not isinstance(bodysubtypes, (list, tuple)):
+            logger.warning(f'[update_bodies_text] bodynames or bodysubtypes are not lists at offset {lastsystemoffset}')
+            self.bodies = bodies_text  # Just show the count
+            return
+        
+        # Ensure bodynames and bodysubtypes have the same length
+        if len(bodynames) != len(bodysubtypes):
+            logger.warning(f'[update_bodies_text] bodynames length ({len(bodynames)}) != bodysubtypes length ({len(bodysubtypes)}) at offset {lastsystemoffset}')
+            self.bodies = bodies_text  # Just show the count
+            return
+        
+        # Handle empty lists
+        if len(bodynames) == 0 or len(bodysubtypes) == 0:
+            self.bodies = f"{bodies_text}\n{lastsystem}: (no bodies)"
+            logger.debug(f"[update_bodies_text] No bodies in lists, result: {self.bodies}")
+            return
      
         waterbodies = []
         rockybodies = []
@@ -2190,17 +3348,29 @@ class GalaxyGPS():
         unknownbodies = []
 
         for num, name in enumerate(bodysubtypes):
-            shortbodyname = bodynames[num].replace(lastsystem + " ", "")
-            if name.lower() == "high metal content world":
-                metalbodies.append(shortbodyname)
-            elif name.lower() == "rocky body": 
-                rockybodies.append(shortbodyname)
-            elif name.lower() == "earth-like world":
-                earthlikebodies.append(shortbodyname)
-            elif name.lower() == "water world": 
-                waterbodies.append(shortbodyname)
-            else:
-                unknownbodies.append(shortbodyname)
+            # Ensure we don't go out of bounds
+            if num >= len(bodynames):
+                logger.warning(f'[update_bodies_text] Index {num} >= bodynames length ({len(bodynames)}) at offset {lastsystemoffset}')
+                break
+            
+            try:
+                body_name = str(bodynames[num]) if bodynames[num] else ""
+                subtype_name = str(name) if name else ""
+                shortbodyname = body_name.replace(lastsystem + " ", "")
+                
+                if subtype_name.lower() == "high metal content world":
+                    metalbodies.append(shortbodyname)
+                elif subtype_name.lower() == "rocky body": 
+                    rockybodies.append(shortbodyname)
+                elif subtype_name.lower() == "earth-like world":
+                    earthlikebodies.append(shortbodyname)
+                elif subtype_name.lower() == "water world": 
+                    waterbodies.append(shortbodyname)
+                else:
+                    unknownbodies.append(shortbodyname)
+            except Exception as e:
+                logger.warning(f'[update_bodies_text] Error processing body {num} at offset {lastsystemoffset}: {e}', exc_info=False)
+                continue
 
         bodysubtypeandname = ""
         if len(metalbodies) > 0: bodysubtypeandname += f"\n   Metal: " + ', '.join(metalbodies)
@@ -2209,7 +3379,8 @@ class GalaxyGPS():
         if len(waterbodies) > 0: bodysubtypeandname += f"\n   Water: " + ', '.join(waterbodies)
         if len(unknownbodies) > 0: bodysubtypeandname += f"\n   Unknown: " + ', '.join(unknownbodies)
 
-        self.bodies = f"\n{lastsystem}:{bodysubtypeandname}"
+        self.bodies = f"{bodies_text}\n{lastsystem}:{bodysubtypeandname}"
+        logger.debug(f"[update_bodies_text] Final self.bodies: {self.bodies[:100]}...")
 
 
     def check_range(self, name, index, mode):
@@ -2234,7 +3405,7 @@ class GalaxyGPS():
                     and (filename.endswith(".py") or filename.endswith(".pyc") or filename.endswith(".pyo"))):
                         os.remove(os.path.join(self.plugin_dir, filename))
         except Exception:
-                logger.warning('!! ' + traceback.format_exc(), exc_info=False)
+            logger.warning('!! ' + traceback.format_exc(), exc_info=False)
 
     def check_for_update(self):
         # Auto-updates enabled
@@ -2245,7 +3416,9 @@ class GalaxyGPS():
         self.cleanup_old_version()
         version_url = f"https://raw.githubusercontent.com/{github_repo}/{github_branch}/version.json"
         try:
-            response = requests.get(version_url, timeout=2)
+            session = timeout_session.new_session()
+            session.headers['User-Agent'] = user_agent + ' GalaxyGPS'
+            response = session.get(version_url, timeout=2)
             if response.status_code == 200:
                 remote_version_content = response.text.strip()
                 try:
@@ -2292,20 +3465,6 @@ class GalaxyGPS():
             return self.fleet_carrier_manager.get_all_carriers()
         return []
     
-    def get_fleet_carriers_in_system(self, system_name: str):
-        """
-        Get all fleet carriers in a specific system.
-        
-        Args:
-            system_name: System name to search for
-            
-        Returns:
-            List of carrier dictionaries in that system
-        """
-        if self.fleet_carrier_manager:
-            return self.fleet_carrier_manager.get_carrier_by_system(system_name)
-        return []
-    
     def update_fleet_carrier_dropdown(self):
         """
         Update the fleet carrier dropdown with available carriers.
@@ -2331,9 +3490,22 @@ class GalaxyGPS():
                 self.fleet_carrier_combobox['values'] = carrier_options
                 
                 # Set default selection to first (most recent) carrier
-                if carrier_options and not self.selected_carrier_callsign:
-                    self.fleet_carrier_combobox.current(0)
-                    self.on_carrier_selected()
+                if carrier_options:
+                    if not self.selected_carrier_callsign:
+                        # First time: auto-select first carrier
+                        self.fleet_carrier_combobox.current(0)
+                        self.on_carrier_selected()
+                    else:
+                        # Already have a selection: refresh display data for current selection
+                        # This ensures system and balance update after CAPI refresh
+                        if hasattr(self, 'update_fleet_carrier_system_display'):
+                            self.update_fleet_carrier_system_display()
+                        if hasattr(self, 'update_fleet_carrier_balance_display'):
+                            self.update_fleet_carrier_balance_display()
+                        if hasattr(self, 'update_fleet_carrier_tritium_display'):
+                            self.update_fleet_carrier_tritium_display()
+                        if hasattr(self, 'update_fleet_carrier_rings_status'):
+                            self.update_fleet_carrier_rings_status()
                     # Enable Inara button if carrier is selected
                     if self.fleet_carrier_inara_btn:
                         self.fleet_carrier_inara_btn.config(state=tk.NORMAL)
@@ -2343,6 +3515,11 @@ class GalaxyGPS():
                 # Disable Inara button if no carrier data
                 if self.fleet_carrier_inara_btn:
                     self.fleet_carrier_inara_btn.config(state=tk.DISABLED)
+                # Set displays to Unknown when no data
+                if hasattr(self, 'update_fleet_carrier_system_display'):
+                    self.update_fleet_carrier_system_display()
+                if hasattr(self, 'update_fleet_carrier_balance_display'):
+                    self.update_fleet_carrier_balance_display()
         except Exception:
             logger.warning('!! Error updating fleet carrier dropdown: ' + traceback.format_exc(), exc_info=False)
             self.fleet_carrier_combobox['values'] = ["Error loading carrier data"]
@@ -2350,6 +3527,7 @@ class GalaxyGPS():
     def on_carrier_selected(self, event=None):
         """
         Handle carrier selection from dropdown.
+        After selection, simplifies the displayed text to just the carrier name.
         """
         try:
             selection = self.fleet_carrier_var.get()
@@ -2380,6 +3558,13 @@ class GalaxyGPS():
                 if parts:
                     self.selected_carrier_callsign = parts[0].strip()
             
+            # Simplify displayed text to just carrier name after selection
+            # Extract just the name part (before the first |)
+            display_parts = selection.split(' | ')
+            if display_parts:
+                simple_display = display_parts[0]  # "Name (CALLSIGN)"
+                self.fleet_carrier_var.set(simple_display)
+            
             # Enable Inara button when carrier is selected
             if self.fleet_carrier_inara_btn and self.selected_carrier_callsign:
                 self.fleet_carrier_inara_btn.config(state=tk.NORMAL)
@@ -2398,51 +3583,7 @@ class GalaxyGPS():
         except Exception:
             logger.warning('!! Error handling carrier selection: ' + traceback.format_exc(), exc_info=False)
     
-    def _style_combobox_popup(self, bg_color):
-        """
-        Style the combobox dropdown popup window to match EDMC theme.
-        Uses EDMC's theme system to properly apply colors to the popup window.
-        
-        Args:
-            bg_color: Background color to use for the dropdown (used for fallback)
-        """
-        try:
-            # Get the popup window (Toplevel) that contains the listbox
-            # The popup is typically a child of the root window
-            root = self.parent.winfo_toplevel()
-            # Find the popup window (it's usually the most recent Toplevel)
-            for widget in root.winfo_children():
-                if isinstance(widget, tk.Toplevel) and widget.winfo_viewable():
-                    # Use EDMC's theme system to properly style the popup window
-                    # This will apply the correct theme colors including background
-                    theme.update(widget)
-                    
-                    # Also explicitly style the Listbox within the popup to ensure it matches
-                    for child in widget.winfo_children():
-                        if isinstance(child, tk.Listbox):
-                            # Apply theme to the listbox
-                            theme.update(child)
-                            # Ensure foreground color matches theme (typically orange for EDMC)
-                            try:
-                                fg_color = child.cget('foreground')
-                                if not fg_color or fg_color.lower() in ['black', '#000000', 'systemwindowtext']:
-                                    # Let theme.handle foreground color automatically
-                                    pass
-                            except:
-                                # Let theme.handle foreground color automatically
-                                pass
-                        # Also style any Frame containers
-                        elif isinstance(child, tk.Frame):
-                            theme.update(child)
-                            # Recursively style nested widgets
-                            for nested in child.winfo_children():
-                                if isinstance(nested, tk.Listbox):
-                                    theme.update(nested)
-                                    # Let theme system handle foreground color automatically
-                                    # theme.update() above will apply correct colors
-        except Exception as e:
-            logger.debug(f'Error styling combobox popup: {e}', exc_info=True)
-            pass  # Silently fail if styling can't be applied
+    # _style_combobox_popup method removed - no longer needed with custom ThemedCombobox widget
     
     def open_selected_carrier_inara(self):
         """
@@ -2450,13 +3591,15 @@ class GalaxyGPS():
         """
         try:
             if not self.selected_carrier_callsign:
-                confirmDialog.showwarning("No Carrier Selected", "Please select a fleet carrier first.")
+                # LANG: Warning when no fleet carrier selected
+                showwarning(self.parent, plugin_tl("No Carrier Selected"), plugin_tl("Please select a fleet carrier first."))
                 return
             
             self.open_inara_carrier(self.selected_carrier_callsign)
         except Exception:
             logger.warning('!! Error opening selected carrier Inara page: ' + traceback.format_exc(), exc_info=False)
-            confirmDialog.showerror("Error", "Failed to open Inara page.")
+            # LANG: Error opening Inara website
+            showerror(self.parent, plugin_tl("Error"), plugin_tl("Failed to open Inara page."))
     
     def select_carrier_from_details(self, callsign: str, details_window=None):
         """
@@ -2508,657 +3651,9 @@ class GalaxyGPS():
         Open a window displaying all fleet carriers with details and Inara.cz links.
         """
         try:
-            carriers = self.get_all_fleet_carriers()
-            if not carriers:
-                confirmDialog.showinfo("Fleet Carriers", "No fleet carrier data available.")
-                return
-            
-            # Create new window
-            details_window = tk.Toplevel(self.parent)
-            details_window.title("Fleet Carrier Details")
-            
-            # Define headers and column widths first - add EDSM button before System
-            headers = ["Select", "Callsign", "Name", "EDSM", "System", "Tritium", "Balance", "Cargo", "State", "Theme", "Icy Rings", "Pristine", "Docking Access", "Notorious Access", "Last Updated"]
-            # Start with header-based widths
-            column_widths = [
-                max(8, len("Select")),      # Select button
-                max(12, len("Callsign")),    # Callsign
-                max(20, len("Name")),        # Name
-                max(6, len("EDSM")),         # EDSM button
-                max(20, len("System")),      # System
-                max(15, len("Tritium")),     # Tritium
-                max(15, len("Balance")),     # Balance
-                max(20, len("Cargo")),       # Cargo
-                max(15, len("State")),       # State
-                max(15, len("Theme")),       # Theme
-                max(12, len("Icy Rings")),   # Icy Rings
-                max(12, len("Pristine")),    # Pristine
-                max(15, len("Docking Access")),  # Docking Access
-                max(18, len("Notorious Access")), # Notorious Access
-                max(20, len("Last Updated"))  # Last Updated
-            ]
-            
-            # Calculate maximum content width for each column by checking all carrier data
-            for carrier in carriers:
-                callsign = carrier.get('callsign', 'Unknown')
-                name = carrier.get('name', '') or 'Unnamed'
-                system = carrier.get('current_system', 'Unknown')
-                
-                # Check for missing numerical values
-                fuel_raw = carrier.get('fuel')
-                tritium_cargo_raw = carrier.get('tritium_in_cargo')
-                balance_raw = carrier.get('balance')
-                cargo_count_raw = carrier.get('cargo_count')
-                cargo_value_raw = carrier.get('cargo_total_value')
-                
-                # Check if values are missing (key doesn't exist, None, or empty string)
-                # Note: '0' or 0 are valid values, so we only mark as missing if key doesn't exist or value is None/empty
-                fuel_missing = 'fuel' not in carrier or fuel_raw is None or (isinstance(fuel_raw, str) and fuel_raw.strip() == '')
-                tritium_cargo_missing = 'tritium_in_cargo' not in carrier or tritium_cargo_raw is None or (isinstance(tritium_cargo_raw, str) and tritium_cargo_raw.strip() == '')
-                balance_missing = 'balance' not in carrier or balance_raw is None or (isinstance(balance_raw, str) and balance_raw.strip() == '')
-                cargo_count_missing = 'cargo_count' not in carrier or cargo_count_raw is None or (isinstance(cargo_count_raw, str) and cargo_count_raw.strip() == '')
-                cargo_value_missing = 'cargo_total_value' not in carrier or cargo_value_raw is None or (isinstance(cargo_value_raw, str) and cargo_value_raw.strip() == '')
-                
-                # Use raw values or defaults for formatting
-                fuel = fuel_raw if fuel_raw is not None else '0'
-                tritium_cargo = tritium_cargo_raw if tritium_cargo_raw is not None else '0'
-                balance = balance_raw if balance_raw is not None else '0'
-                cargo_count = cargo_count_raw if cargo_count_raw is not None else '0'
-                cargo_value = cargo_value_raw if cargo_value_raw is not None else '0'
-                
-                state = carrier.get('state', 'Unknown')
-                theme = carrier.get('theme', 'Unknown')
-                docking_access = carrier.get('docking_access', '')
-                last_updated = carrier.get('last_updated', 'Unknown')
-                
-                # Format balance - show "Needs Update" if missing, otherwise format with commas (including 0)
-                if balance_missing:
-                    balance_formatted = "Needs Update"
-                else:
-                    try:
-                        balance_int = int(balance) if balance else 0
-                        balance_formatted = f"{balance_int:,}"
-                    except (ValueError, TypeError):
-                        balance_formatted = str(balance) if balance else "Needs Update"
-                
-                # Format cargo value - show "Needs Update" if missing, otherwise format with commas (including 0)
-                if cargo_value_missing:
-                    cargo_value_formatted = "Needs Update"
-                else:
-                    try:
-                        cargo_value_int = int(cargo_value) if cargo_value else 0
-                        cargo_value_formatted = f"{cargo_value_int:,}"
-                    except (ValueError, TypeError):
-                        cargo_value_formatted = str(cargo_value) if cargo_value else "Needs Update"
-                
-                # Format cargo text - show "Needs Update" if either count or value is missing
-                if cargo_count_missing or cargo_value_missing:
-                    cargo_text = "Needs Update"
-                else:
-                    try:
-                        cargo_count_int = int(cargo_count) if cargo_count else 0
-                        cargo_text = f"{cargo_count_int} ({cargo_value_formatted} cr)"
-                    except (ValueError, TypeError):
-                        cargo_text = "Needs Update"
-                
-                # Format Tritium - show "Needs Update" if fuel is missing, otherwise show value (including 0)
-                if fuel_missing:
-                    tritium_text = "Needs Update"
-                elif not tritium_cargo_missing and tritium_cargo and tritium_cargo != '0':
-                    try:
-                        fuel_int = int(fuel) if fuel else 0
-                        tritium_cargo_int = int(tritium_cargo) if tritium_cargo else 0
-                        tritium_text = f"{fuel_int} / {tritium_cargo_int}"
-                    except (ValueError, TypeError):
-                        tritium_text = f"{fuel} / {tritium_cargo}" if fuel and tritium_cargo else str(fuel) if fuel else "Needs Update"
-                else:
-                    try:
-                        fuel_int = int(fuel) if fuel else 0
-                        tritium_text = str(fuel_int)
-                    except (ValueError, TypeError):
-                        tritium_text = str(fuel) if fuel else "Needs Update"
-                
-                # Update column widths based on actual content (add 2 for padding)
-                # Account for "Needs Update" text which is longer
-                column_widths[1] = max(column_widths[1], len(str(callsign)) + 2)  # Callsign
-                column_widths[2] = max(column_widths[2], len(str(name)) + 2)      # Name
-                column_widths[4] = max(column_widths[4], len(str(system)) + 2)     # System
-                column_widths[5] = max(column_widths[5], len(str(tritium_text)) + 2)  # Tritium
-                column_widths[6] = max(column_widths[6], len(str(balance_formatted)) + 2)  # Balance
-                column_widths[7] = max(column_widths[7], len(str(cargo_text)) + 2)  # Cargo
-                column_widths[8] = max(column_widths[8], len(str(state)) + 2)       # State
-                column_widths[9] = max(column_widths[9], len(str(theme)) + 2)      # Theme
-                column_widths[12] = max(column_widths[12], len(str(docking_access)) + 2)  # Docking Access
-                column_widths[14] = max(column_widths[14], len(str(last_updated)) + 2)  # Last Updated
-            
-            # Calculate required width based on columns
-            # More accurate estimate: column_widths * 8-10 pixels per character + padding + separators
-            # Account for separators (one between each column, ~2px each)
-            num_separators = len(headers) - 1
-            separator_width = num_separators * 2
-            # Use 9 pixels per character width for more accurate sizing
-            total_column_width = sum(column_widths) * 9 + separator_width + 200  # Add padding for buttons/scrollbars/margins
-            screen_width = details_window.winfo_screenwidth()
-            # Open window wide enough to show all columns, but don't exceed screen width
-            # If content is wider than screen, user can scroll horizontally
-            window_width = min(total_column_width, screen_width - 20)  # Leave small margin from screen edges
-            # Ensure minimum width so content isn't cut off
-            window_width = max(window_width, 800)  # At least 800px wide
-            
-            # Create main container with horizontal and vertical scrolling
-            main_frame = tk.Frame(details_window)
-            main_frame.pack(fill=tk.BOTH, expand=True)
-            theme.update(main_frame)
-            
-            # Create horizontal scrollbar
-            h_scrollbar = ttk.Scrollbar(main_frame, orient=tk.HORIZONTAL)
-            h_scrollbar.pack(side=tk.BOTTOM, fill=tk.X)
-            
-            # Create vertical scrollbar
-            v_scrollbar = ttk.Scrollbar(main_frame, orient=tk.VERTICAL)
-            v_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
-            
-            # Create canvas with both scrollbars
-            canvas = ThemeSafeCanvas(main_frame,
-                             xscrollcommand=h_scrollbar.set,
-                             yscrollcommand=v_scrollbar.set)
-            canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-            theme.update(canvas)
-            
-            h_scrollbar.config(command=canvas.xview)
-            v_scrollbar.config(command=canvas.yview)
-            
-            scrollable_frame = tk.Frame(canvas)
-            
-            canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
-            theme.update(scrollable_frame)
-            
-            # Update canvas scroll region when frame size changes
-            def on_frame_configure(event):
-                canvas.configure(scrollregion=canvas.bbox("all"))
-                # Update canvas window width to match canvas width for proper horizontal scrolling
-                canvas_width = canvas.winfo_width()
-                if canvas_width > 1:  # Only update if canvas has been rendered
-                    canvas_window_id = canvas.find_all()
-                    if canvas_window_id:
-                        canvas.itemconfig(canvas_window_id[0], width=canvas_width)
-            
-            scrollable_frame.bind("<Configure>", on_frame_configure)
-            
-            # Also bind to canvas resize
-            def on_canvas_configure(event):
-                canvas_width = event.width
-                canvas_window_id = canvas.find_all()
-                if canvas_window_id:
-                    canvas.itemconfig(canvas_window_id[0], width=canvas_width)
-            
-            canvas.bind('<Configure>', on_canvas_configure)
-            
-            # Create a single table frame that will contain both header and data rows in one grid
-            table_frame = tk.Frame(scrollable_frame)
-            table_frame.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
-            theme.update(table_frame)
-            # Force update to ensure theme colors are applied before reading background
-            table_frame.update_idletasks()
-            
-            # Determine which columns should be right-aligned (numeric columns)
-            numeric_columns_fleet = set()
-            for header_name in headers:
-                header_lower = header_name.lower()
-                # Right-align numeric columns: Tritium, Balance (but not Cargo which has text)
-                if any(keyword in header_lower for keyword in ['tritium', 'balance']) and 'cargo' not in header_lower:
-                    numeric_columns_fleet.add(header_lower)
-            
-            # Header row (row 0) - styled with grey background and bold text
-            header_row = 0
-            for i, header in enumerate(headers):
-                # Right-align numeric columns, left-align text columns, center-align checkbox columns
-                header_lower = header.lower()
-                # Check if this is an indicator column (Icy Rings, Pristine, Docking Access, Notorious Access, Refuel, Neutron Star, etc.)
-                is_indicator_col = any(keyword in header_lower for keyword in ['icy rings', 'pristine', 'docking access', 'notorious access', 'refuel', 'neutron star', 'restock tritium', 'is terraformable'])
-                if header_lower == "edsm":  # EDSM button column - center align
-                    anchor = "c"
-                    sticky_val = tk.EW
-                elif header_lower in numeric_columns_fleet:
-                    anchor = "e"  # Right-align for numeric columns
-                    sticky = tk.E
-                elif is_indicator_col:
-                    anchor = "c"  # Center-align for indicator columns (colored dots)
-                    sticky = tk.EW  # Expand to fill column width for centering
-                else:
-                    anchor = "w"  # Left-align for text columns
-                    sticky = tk.W
-                # Use exact same width as data cells for perfect alignment
-                header_width = column_widths[i] if i < len(column_widths) else 20
-                label = tk.Label(table_frame, text=header, font=("Arial", 9, "bold"), width=header_width, anchor=anchor)
-                label.grid(row=header_row, column=i*2, padx=2, pady=5, sticky=sticky)
-                theme.update(label)
-                # Add vertical separator after each column (except the last)
-                if i < len(headers) - 1:
-                    separator = ttk.Separator(table_frame, orient=tk.VERTICAL)
-                    separator.grid(row=header_row, column=i*2+1, padx=0, pady=2, sticky=tk.NS)
-            
-            # Carrier data rows (rows 1+) - use same grid as header for perfect alignment
-            # Get background color from theme AFTER theme.update() has been applied
-            # Force another update to ensure colors are applied
-            table_frame.update_idletasks()
-            try:
-                base_bg = table_frame.cget('bg')
-                # Use theme background color, not hardcoded white
-                # Empty string means let theme handle it completely
-                row_bg = base_bg if base_bg and base_bg.lower() not in ['white', '#ffffff', 'systemwindow'] else ""
-            except:
-                row_bg = ""  # Empty string allows theme to handle it
-            for idx, carrier in enumerate(sorted(carriers, key=lambda x: x.get('last_updated', ''), reverse=True)):
-                data_row = idx + 1  # Start from row 1 (row 0 is header)
-                
-                callsign = carrier.get('callsign', 'Unknown')
-                name = carrier.get('name', '') or 'Unnamed'
-                system = carrier.get('current_system', 'Unknown')
-                
-                # Check for missing numerical values - use None if key doesn't exist or value is None/empty
-                fuel_raw = carrier.get('fuel')
-                tritium_cargo_raw = carrier.get('tritium_in_cargo')
-                balance_raw = carrier.get('balance')
-                cargo_count_raw = carrier.get('cargo_count')
-                cargo_value_raw = carrier.get('cargo_total_value')
-                
-                # Check if values are missing (key doesn't exist, None, or empty string)
-                # Note: '0' or 0 are valid values, so we only mark as missing if key doesn't exist or value is None/empty
-                fuel_missing = 'fuel' not in carrier or fuel_raw is None or (isinstance(fuel_raw, str) and fuel_raw.strip() == '')
-                tritium_cargo_missing = 'tritium_in_cargo' not in carrier or tritium_cargo_raw is None or (isinstance(tritium_cargo_raw, str) and tritium_cargo_raw.strip() == '')
-                balance_missing = 'balance' not in carrier or balance_raw is None or (isinstance(balance_raw, str) and balance_raw.strip() == '')
-                cargo_count_missing = 'cargo_count' not in carrier or cargo_count_raw is None or (isinstance(cargo_count_raw, str) and cargo_count_raw.strip() == '')
-                cargo_value_missing = 'cargo_total_value' not in carrier or cargo_value_raw is None or (isinstance(cargo_value_raw, str) and cargo_value_raw.strip() == '')
-                
-                # Use raw values or defaults for formatting
-                fuel = fuel_raw if fuel_raw is not None else '0'
-                tritium_cargo = tritium_cargo_raw if tritium_cargo_raw is not None else '0'
-                balance = balance_raw if balance_raw is not None else '0'
-                cargo_count = cargo_count_raw if cargo_count_raw is not None else '0'
-                cargo_value = cargo_value_raw if cargo_value_raw is not None else '0'
-                
-                state = carrier.get('state', 'Unknown')
-                theme = carrier.get('theme', 'Unknown')
-                icy_rings = carrier.get('icy_rings', '')
-                pristine = carrier.get('pristine', '')
-                docking_access = carrier.get('docking_access', '')
-                notorious_access = carrier.get('notorious_access', '')
-                last_updated = carrier.get('last_updated', 'Unknown')
-                
-                # Format balance - show "Needs Update" if missing, otherwise format with commas (including 0)
-                if balance_missing:
-                    balance_formatted = "Needs Update"
-                else:
-                    try:
-                        balance_int = int(balance) if balance else 0
-                        balance_formatted = f"{balance_int:,}"
-                    except (ValueError, TypeError):
-                        balance_formatted = str(balance) if balance else "Needs Update"
-                
-                # Format cargo value - show "Needs Update" if missing, otherwise format with commas (including 0)
-                if cargo_value_missing:
-                    cargo_value_formatted = "Needs Update"
-                else:
-                    try:
-                        cargo_value_int = int(cargo_value) if cargo_value else 0
-                        cargo_value_formatted = f"{cargo_value_int:,}"
-                    except (ValueError, TypeError):
-                        cargo_value_formatted = str(cargo_value) if cargo_value else "Needs Update"
-                
-                # Format cargo text - show "Needs Update" if either count or value is missing
-                if cargo_count_missing or cargo_value_missing:
-                    cargo_text = "Needs Update"
-                else:
-                    try:
-                        cargo_count_int = int(cargo_count) if cargo_count else 0
-                        cargo_text = f"{cargo_count_int} ({cargo_value_formatted} cr)"
-                    except (ValueError, TypeError):
-                        cargo_text = "Needs Update"
-                
-                # Format Tritium: fuel / cargo (or just fuel if no cargo)
-                # Show "Needs Update" if fuel is missing, otherwise show value (including 0)
-                if fuel_missing:
-                    tritium_text = "Needs Update"
-                elif not tritium_cargo_missing and tritium_cargo and tritium_cargo != '0':
-                    try:
-                        fuel_int = int(fuel) if fuel else 0
-                        tritium_cargo_int = int(tritium_cargo) if tritium_cargo else 0
-                        tritium_text = f"{fuel_int} / {tritium_cargo_int}"
-                    except (ValueError, TypeError):
-                        tritium_text = f"{fuel} / {tritium_cargo}" if fuel and tritium_cargo else str(fuel) if fuel else "Needs Update"
-                else:
-                    try:
-                        fuel_int = int(fuel) if fuel else 0
-                        tritium_text = str(fuel_int)
-                    except (ValueError, TypeError):
-                        tritium_text = str(fuel) if fuel else "Needs Update"
-                
-                # Use the same column indexing pattern as headers (i*2 for labels, i*2+1 for separators)
-                # Use column_widths array to ensure alignment with headers
-                col_idx = 0
-                
-                # Select button - updates dropdown to select this carrier
-                # Only set bg if row_bg is a valid non-empty string
-                select_btn = tk.Button(
-                    table_frame,
-                    text="Select",
-                    command=lambda c=callsign: self.select_carrier_from_details(c, details_window),
-                    width=column_widths[col_idx],
-                    relief=tk.RAISED,
-                    bg=row_bg if row_bg else None  # Only set bg if row_bg is not empty
-                )
-                select_btn.grid(row=data_row, column=col_idx*2, padx=2, pady=5, sticky=tk.W)
-                theme.update(select_btn)
-                # Add separator after Select column
-                if col_idx < len(headers) - 1:
-                    separator0 = ttk.Separator(table_frame, orient=tk.VERTICAL)
-                    separator0.grid(row=data_row, column=col_idx*2+1, padx=0, pady=2, sticky=tk.NS)
-                    theme.update(separator0)
-                col_idx += 1
-                
-                # Highlight if this is the currently selected carrier
-                if callsign == self.selected_carrier_callsign:
-                    select_btn.config(bg="lightgreen", text="Selected")
-                
-                # Callsign (clickable to Inara) - use exact same width as header
-                callsign_width = column_widths[col_idx] if col_idx < len(column_widths) else 20
-                callsign_label = tk.Label(table_frame, text=callsign, fg="blue", cursor="hand2", width=callsign_width, anchor="w", bg=row_bg if row_bg else None)
-                callsign_label.grid(row=data_row, column=col_idx*2, padx=2, pady=5, sticky=tk.W)
-                theme.update(callsign_label)
-                callsign_label.bind("<Button-1>", lambda e, c=callsign: self.open_inara_carrier(c))
-                callsign_label.bind("<Enter>", lambda e, lbl=callsign_label: lbl.config(fg="darkblue", underline=True))
-                callsign_label.bind("<Leave>", lambda e, lbl=callsign_label: lbl.config(fg="blue", underline=False))
-                if col_idx < len(headers) - 1:
-                    separator1 = ttk.Separator(table_frame, orient=tk.VERTICAL)
-                    separator1.grid(row=data_row, column=col_idx*2+1, padx=0, pady=2, sticky=tk.NS)
-                    theme.update(separator1)
-                col_idx += 1
-                
-                # Name (clickable to Inara) - use exact same width as header
-                name_width = column_widths[col_idx] if col_idx < len(column_widths) else 20
-                name_label = tk.Label(table_frame, text=name, fg="blue", cursor="hand2", width=name_width, anchor="w", bg=row_bg if row_bg else None)
-                name_label.grid(row=data_row, column=col_idx*2, padx=2, pady=5, sticky=tk.W)
-                theme.update(name_label)
-                name_label.bind("<Button-1>", lambda e, c=callsign: self.open_inara_carrier(c))
-                name_label.bind("<Enter>", lambda e, lbl=name_label: lbl.config(fg="darkblue", underline=True))
-                name_label.bind("<Leave>", lambda e, lbl=name_label: lbl.config(fg="blue", underline=False))
-                if col_idx < len(headers) - 1:
-                    separator2 = ttk.Separator(table_frame, orient=tk.VERTICAL)
-                    separator2.grid(row=data_row, column=col_idx*2+1, padx=0, pady=2, sticky=tk.NS)
-                    theme.update(separator2)
-                col_idx += 1
-                
-                # EDSM button - before System column
-                edsm_btn_width = column_widths[col_idx] if col_idx < len(column_widths) else 6
-                btn_kwargs = {"master": table_frame, "text": "EDSM", "command": lambda s=system: self.open_edsm_system(s), "width": edsm_btn_width}
-                if row_bg:
-                    btn_kwargs["bg"] = row_bg
-                edsm_btn = tk.Button(**btn_kwargs)
-                edsm_btn.grid(row=data_row, column=col_idx*2, padx=2, pady=5, sticky=tk.W)
-                theme.update(edsm_btn)
-                if col_idx < len(headers) - 1:
-                    separator_edsm = ttk.Separator(table_frame, orient=tk.VERTICAL)
-                    separator_edsm.grid(row=data_row, column=col_idx*2+1, padx=0, pady=2, sticky=tk.NS)
-                    theme.update(separator_edsm)
-                col_idx += 1
-                
-                # System (clickable to Inara) - use exact same width as header
-                system_width = column_widths[col_idx] if col_idx < len(column_widths) else 20
-                system_label = tk.Label(table_frame, text=system, fg="blue", cursor="hand2", width=system_width, anchor="w", bg=row_bg if row_bg else None)
-                system_label.grid(row=data_row, column=col_idx*2, padx=2, pady=5, sticky=tk.W)
-                theme.update(system_label)
-                system_label.bind("<Button-1>", lambda e, s=system: self.open_inara_system(s))
-                system_label.bind("<Enter>", lambda e, lbl=system_label: lbl.config(fg="darkblue", underline=True))
-                system_label.bind("<Leave>", lambda e, lbl=system_label: lbl.config(fg="blue", underline=False))
-                if col_idx < len(headers) - 1:
-                    separator3 = ttk.Separator(table_frame, orient=tk.VERTICAL)
-                    separator3.grid(row=data_row, column=col_idx*2+1, padx=0, pady=2, sticky=tk.NS)
-                    theme.update(separator3)
-                col_idx += 1
-                
-                # Tritium (fuel / cargo) - right-align numeric, use exact same width as header
-                tritium_width = column_widths[col_idx] if col_idx < len(column_widths) else 20
-                label_kwargs = {"master": table_frame, "text": tritium_text, "width": tritium_width, "anchor": "e"}
-                if row_bg:
-                    label_kwargs["bg"] = row_bg
-                tritium_label = tk.Label(**label_kwargs)
-                tritium_label.grid(row=data_row, column=col_idx*2, padx=2, pady=5, sticky=tk.E)
-                theme.update(tritium_label)
-                if col_idx < len(headers) - 1:
-                    separator4 = ttk.Separator(table_frame, orient=tk.VERTICAL)
-                    separator4.grid(row=data_row, column=col_idx*2+1, padx=0, pady=2, sticky=tk.NS)
-                    theme.update(separator4)
-                col_idx += 1
-                
-                # Balance - right-align numeric, use exact same width as header
-                balance_width = column_widths[col_idx] if col_idx < len(column_widths) else 20
-                label_kwargs = {"master": table_frame, "text": balance_formatted, "width": balance_width, "anchor": "e"}
-                if row_bg:
-                    label_kwargs["bg"] = row_bg
-                balance_label = tk.Label(**label_kwargs)
-                balance_label.grid(row=data_row, column=col_idx*2, padx=2, pady=5, sticky=tk.E)
-                theme.update(balance_label)
-                if col_idx < len(headers) - 1:
-                    separator5 = ttk.Separator(table_frame, orient=tk.VERTICAL)
-                    separator5.grid(row=data_row, column=col_idx*2+1, padx=0, pady=2, sticky=tk.NS)
-                    theme.update(separator5)
-                col_idx += 1
-                
-                # Cargo - left-align text, use exact same width as header
-                cargo_width = column_widths[col_idx] if col_idx < len(column_widths) else 20
-                label_kwargs = {"master": table_frame, "text": cargo_text, "width": cargo_width, "anchor": "w"}
-                if row_bg:
-                    label_kwargs["bg"] = row_bg
-                cargo_label = tk.Label(**label_kwargs)
-                cargo_label.grid(row=data_row, column=col_idx*2, padx=2, pady=5, sticky=tk.W)
-                theme.update(cargo_label)
-                if col_idx < len(headers) - 1:
-                    separator6 = ttk.Separator(table_frame, orient=tk.VERTICAL)
-                    separator6.grid(row=data_row, column=col_idx*2+1, padx=0, pady=2, sticky=tk.NS)
-                    theme.update(separator6)
-                col_idx += 1
-                
-                # State - use exact same width as header
-                state_width = column_widths[col_idx] if col_idx < len(column_widths) else 20
-                label_kwargs = {"master": table_frame, "text": state, "width": state_width, "anchor": "w"}
-                if row_bg:
-                    label_kwargs["bg"] = row_bg
-                state_label = tk.Label(**label_kwargs)
-                state_label.grid(row=data_row, column=col_idx*2, padx=2, pady=5, sticky=tk.W)
-                theme.update(state_label)
-                if col_idx < len(headers) - 1:
-                    separator7 = ttk.Separator(table_frame, orient=tk.VERTICAL)
-                    separator7.grid(row=data_row, column=col_idx*2+1, padx=0, pady=2, sticky=tk.NS)
-                    theme.update(separator7)
-                col_idx += 1
-                
-                # Theme - use exact same width as header
-                theme_width = column_widths[col_idx] if col_idx < len(column_widths) else 20
-                label_kwargs = {"master": table_frame, "text": theme, "width": theme_width, "anchor": "w"}
-                if row_bg:
-                    label_kwargs["bg"] = row_bg
-                theme_label = tk.Label(**label_kwargs)
-                theme_label.grid(row=data_row, column=col_idx*2, padx=2, pady=5, sticky=tk.W)
-                theme.update(theme_label)
-                if col_idx < len(headers) - 1:
-                    separator8 = ttk.Separator(table_frame, orient=tk.VERTICAL)
-                    separator8.grid(row=data_row, column=col_idx*2+1, padx=0, pady=2, sticky=tk.NS)
-                    theme.update(separator8)
-                col_idx += 1
-                
-                # Icy Rings (read-only indicator) - colored dot, center-aligned
-                icy_rings_width = column_widths[col_idx] if col_idx < len(column_widths) else 20
-                icy_rings_str = str(icy_rings).strip().lower() if icy_rings else ''
-                icy_rings_value = icy_rings_str == 'yes'
-                # Create a frame to center the canvas within the column
-                frame_kwargs = {"master": table_frame}
-                if row_bg:
-                    frame_kwargs["bg"] = row_bg
-                icy_rings_frame = tk.Frame(**frame_kwargs)
-                icy_rings_frame.grid(row=data_row, column=col_idx*2, padx=2, pady=5, sticky=tk.EW)
-                theme.update(icy_rings_frame)
-                canvas_kwargs = {"master": icy_rings_frame, "width": 20, "height": 20, "highlightthickness": 0}
-                if row_bg:
-                    canvas_kwargs["bg"] = row_bg
-                icy_rings_canvas = ThemeSafeCanvas(**canvas_kwargs)
-                icy_rings_canvas.pack(anchor=tk.CENTER)  # Center the canvas in the frame
-                if icy_rings_value:
-                    icy_rings_canvas.create_oval(5, 5, 15, 15, fill="red", outline="darkred", width=1)
-                else:
-                    icy_rings_canvas.create_oval(5, 5, 15, 15, fill=row_bg, outline="lightgray", width=1)
-                if col_idx < len(headers) - 1:
-                    separator9 = ttk.Separator(table_frame, orient=tk.VERTICAL)
-                    separator9.grid(row=data_row, column=col_idx*2+1, padx=0, pady=2, sticky=tk.NS)
-                    theme.update(separator9)
-                col_idx += 1
-                
-                # Pristine (read-only indicator) - colored dot, center-aligned
-                pristine_width = column_widths[col_idx] if col_idx < len(column_widths) else 20
-                pristine_str = str(pristine).strip().lower() if pristine else ''
-                pristine_value = pristine_str == 'yes'
-                # Create a frame to center the canvas within the column
-                frame_kwargs = {"master": table_frame}
-                if row_bg:
-                    frame_kwargs["bg"] = row_bg
-                pristine_frame = tk.Frame(**frame_kwargs)
-                pristine_frame.grid(row=data_row, column=col_idx*2, padx=2, pady=5, sticky=tk.EW)
-                theme.update(pristine_frame)
-                canvas_kwargs = {"master": pristine_frame, "width": 20, "height": 20, "highlightthickness": 0}
-                if row_bg:
-                    canvas_kwargs["bg"] = row_bg
-                pristine_canvas = ThemeSafeCanvas(**canvas_kwargs)
-                pristine_canvas.pack(anchor=tk.CENTER)  # Center the canvas in the frame
-                if pristine_value:
-                    pristine_canvas.create_oval(5, 5, 15, 15, fill="red", outline="darkred", width=1)
-                else:
-                    pristine_canvas.create_oval(5, 5, 15, 15, fill=row_bg, outline="lightgray", width=1)
-                if col_idx < len(headers) - 1:
-                    separator10 = ttk.Separator(table_frame, orient=tk.VERTICAL)
-                    separator10.grid(row=data_row, column=col_idx*2+1, padx=0, pady=2, sticky=tk.NS)
-                    theme.update(separator10)
-                col_idx += 1
-                
-                # Docking Access (read-only indicator) - colored dot, center-aligned
-                docking_access_width = column_widths[col_idx] if col_idx < len(column_widths) else 20
-                docking_access_str = str(docking_access).strip().lower() if docking_access else ''
-                docking_access_value = docking_access_str in ['yes', 'all', 'friends', 'squadron']
-                # Create a frame to center the canvas within the column
-                frame_kwargs = {"master": table_frame}
-                if row_bg:
-                    frame_kwargs["bg"] = row_bg
-                docking_access_frame = tk.Frame(**frame_kwargs)
-                docking_access_frame.grid(row=data_row, column=col_idx*2, padx=2, pady=5, sticky=tk.EW)
-                theme.update(docking_access_frame)
-                canvas_kwargs = {"master": docking_access_frame, "width": 20, "height": 20, "highlightthickness": 0}
-                if row_bg:
-                    canvas_kwargs["bg"] = row_bg
-                docking_access_canvas = ThemeSafeCanvas(**canvas_kwargs)
-                docking_access_canvas.pack(anchor=tk.CENTER)  # Center the canvas in the frame
-                if docking_access_value:
-                    docking_access_canvas.create_oval(5, 5, 15, 15, fill="red", outline="darkred", width=1)
-                else:
-                    docking_access_canvas.create_oval(5, 5, 15, 15, fill=row_bg, outline="lightgray", width=1)
-                if col_idx < len(headers) - 1:
-                    separator11 = ttk.Separator(table_frame, orient=tk.VERTICAL)
-                    separator11.grid(row=data_row, column=col_idx*2+1, padx=0, pady=2, sticky=tk.NS)
-                    theme.update(separator11)
-                col_idx += 1
-                
-                # Notorious Access (read-only indicator) - colored dot, center-aligned
-                notorious_access_width = column_widths[col_idx] if col_idx < len(column_widths) else 20
-                if isinstance(notorious_access, str):
-                    notorious_access_str = notorious_access.strip().lower()
-                    notorious_access_value = notorious_access_str in ['true', 'yes', '1']
-                else:
-                    notorious_access_value = bool(notorious_access) if notorious_access else False
-                # Create a frame to center the canvas within the column
-                frame_kwargs = {"master": table_frame}
-                if row_bg:
-                    frame_kwargs["bg"] = row_bg
-                notorious_access_frame = tk.Frame(**frame_kwargs)
-                notorious_access_frame.grid(row=data_row, column=col_idx*2, padx=2, pady=5, sticky=tk.EW)
-                theme.update(notorious_access_frame)
-                canvas_kwargs = {"master": notorious_access_frame, "width": 20, "height": 20, "highlightthickness": 0}
-                if row_bg:
-                    canvas_kwargs["bg"] = row_bg
-                notorious_access_canvas = ThemeSafeCanvas(**canvas_kwargs)
-                notorious_access_canvas.pack(anchor=tk.CENTER)  # Center the canvas in the frame
-                if notorious_access_value:
-                    notorious_access_canvas.create_oval(5, 5, 15, 15, fill="red", outline="darkred", width=1)
-                else:
-                    notorious_access_canvas.create_oval(5, 5, 15, 15, fill=row_bg, outline="lightgray", width=1)
-                if col_idx < len(headers) - 1:
-                    separator12 = ttk.Separator(table_frame, orient=tk.VERTICAL)
-                    separator12.grid(row=data_row, column=col_idx*2+1, padx=0, pady=2, sticky=tk.NS)
-                    theme.update(separator12)
-                col_idx += 1
-                
-                # Last Updated - use exact same width as header
-                last_updated_width = column_widths[col_idx] if col_idx < len(column_widths) else 20
-                label_kwargs = {"master": table_frame, "text": last_updated, "width": last_updated_width, "anchor": "w"}
-                if row_bg:
-                    label_kwargs["bg"] = row_bg
-                last_updated_label = tk.Label(**label_kwargs)
-                last_updated_label.grid(row=data_row, column=col_idx*2, padx=2, pady=5, sticky=tk.W)
-                theme.update(last_updated_label)
-            
-            # Apply theme recursively to entire table_frame after all widgets are created
-            # This ensures any widgets we missed get themed properly
-            # theme.update() will automatically apply correct foreground colors based on current theme
-            theme.update(table_frame)
-            
-            # Style ttk.Separator widgets - they need special handling via ttk.Style
-            # Separators don't automatically get themed, so we style them to match theme foreground color
-            try:
-                separator_style = ttk.Style()
-                # Get theme foreground color from a label to match separator color
-                sample_label = tk.Label(table_frame)
-                theme.update(sample_label)
-                try:
-                    theme_fg = sample_label.cget('foreground')
-                    if theme_fg:
-                        # Configure separator background to match theme foreground color
-                        separator_style.configure('TSeparator', background=theme_fg)
-                except:
-                    pass
-                sample_label.destroy()
-            except:
-                pass
-            
-            # Finalize window setup after all widgets are created
-            canvas.update_idletasks()
-            canvas.configure(scrollregion=canvas.bbox("all"))
-            
-            # Calculate actual content width after widgets are created
-            scrollable_frame.update_idletasks()
-            actual_content_width = scrollable_frame.winfo_reqwidth()
-            # Use the larger of calculated width or actual content width
-            final_width = max(window_width, actual_content_width + 50)  # Add padding
-            # Still respect screen bounds
-            screen_width = details_window.winfo_screenwidth()
-            final_width = min(final_width, screen_width - 20)
-            final_width = max(final_width, 800)  # Minimum 800px
-            
-            # Set window size
-            details_window.geometry(f"{final_width}x600")
-            details_window.minsize(800, 400)  # Minimum size to show content
-            
-            # Close button (outside scrollable area)
-            close_btn_frame = tk.Frame(details_window)
-            close_btn_frame.pack(pady=5)
-            theme.update(close_btn_frame)
-            close_btn = tk.Button(close_btn_frame, text="Close", command=details_window.destroy)
-            close_btn.pack()
-            theme.update(close_btn)
-            
-            # Apply theme to main frame (theme.update doesn't accept Toplevel directly)
-            # theme.update() will recursively apply to all child widgets
-            theme.update(main_frame)
-            
-        except Exception:
-            logger.warning('!! Error showing carrier details window: ' + traceback.format_exc(), exc_info=False)
-            confirmDialog.showerror("Error", "Failed to display carrier details.")
+            show_carrier_details_window(self)
+        except Exception as e:
+            logger.error(f"[GalaxyGPS.show_carrier_details_window] ERROR: {e}", exc_info=True)
     
     def open_inara_carrier(self, callsign: str):
         """
@@ -3219,52 +3714,43 @@ class GalaxyGPS():
     
     def check_fleet_carrier_restock_warning(self):
         """
-        Check if the fleet carrier is currently in a system that requires Tritium restock
-        based on the route CSV. Shows warning and "Find Trit" button if needed.
+        Check if the current waypoint in the route requires Tritium restock.
+        Shows warning and "Find Trit" button if the current waypoint has "Restock Tritium" = "Yes".
         """
         if not self.fleetcarrier or not self.route:
             self.fleetrestock_lbl.grid_remove()
             self.find_trit_btn.grid_remove()
             return
         
-        # Get the currently selected carrier's system
-        carrier_system = None
-        if self.selected_carrier_callsign and self.fleet_carrier_manager:
-            carrier = self.fleet_carrier_manager.get_carrier(self.selected_carrier_callsign)
-            if carrier:
-                carrier_system = carrier.get('current_system', '').strip()
+        # Check if we have a valid offset
+        if self.offset < 0 or self.offset >= len(self.route):
+            self.fleetrestock_lbl.grid_remove()
+            self.find_trit_btn.grid_remove()
+            return
         
-        # If no carrier selected, try to get the first/primary carrier
-        if not carrier_system:
-            carriers = self.get_all_fleet_carriers()
-            if carriers:
-                # Get the most recently updated carrier
-                sorted_carriers = sorted(
-                    carriers,
-                    key=lambda x: x.get('last_updated', ''),
-                    reverse=True
-                )
-                carrier_system = sorted_carriers[0].get('current_system', '').strip()
+        # Get the current waypoint from the route
+        current_waypoint = self.route[self.offset]
         
-        # Check if any route entry matches carrier's current system and has "Restock Tritium" = "Yes"
-        if carrier_system:
-            for route_entry in self.route:
-                route_system = route_entry[0].strip() if len(route_entry) > 0 else ""
-                
-                # Check if system names match (case-insensitive)
-                if route_system.lower() == carrier_system.lower():
-                    # Check if this route entry has "Restock Tritium" = "Yes"
-                    # For fleet carrier routes, the "Restock Tritium" is typically the last column
-                    if len(route_entry) > 2:
-                        restock_value = route_entry[-1].strip().lower() if route_entry[-1] else ""
-                        if restock_value == "yes":
-                            # Show warning (without system name, it's shown separately)
-                            self.fleetrestock_lbl["text"] = self.fleetstocklbl_txt
-                            self.fleetrestock_lbl.grid()
-                            self.find_trit_btn.grid()
-                            return
+        logger.debug(f"[check_fleet_carrier_restock_warning] Checking waypoint at offset {self.offset}, length: {len(current_waypoint)}")
         
-        # Hide if no match found
+        # Check if this route entry has "Restock Tritium" = "Yes"
+        # For fleet carrier routes: [System Name, Distance, Distance Remaining, Tritium in tank, Tritium in market, Fuel Used, Icy Ring, Pristine, Restock Tritium]
+        # Restock Tritium is at index 8
+        if len(current_waypoint) > 8:
+            restock_value = current_waypoint[8].strip().lower() if current_waypoint[8] else ""
+            logger.debug(f"[check_fleet_carrier_restock_warning] Restock Tritium value at offset {self.offset}: '{restock_value}'")
+            if restock_value == "yes":
+                # Show warning
+                logger.debug(f"[check_fleet_carrier_restock_warning] Showing restock warning")
+                self.fleetrestock_lbl["text"] = plugin_tl("Restock Tritium Now")
+                self.fleetrestock_lbl.grid()
+                self.find_trit_btn.grid()
+                return
+        else:
+            logger.debug(f"[check_fleet_carrier_restock_warning] Route entry length {len(current_waypoint)} <= 8")
+        
+        # Hide if no restock needed at current waypoint
+        logger.debug(f"[check_fleet_carrier_restock_warning] No restock needed, hiding warning")
         self.fleetrestock_lbl.grid_remove()
         self.find_trit_btn.grid_remove()
     
@@ -3292,7 +3778,8 @@ class GalaxyGPS():
                     carrier_system = sorted_carriers[0].get('current_system', '').strip()
             
             if not carrier_system:
-                confirmDialog.showwarning("No System", "Could not determine carrier's current system.")
+                # LANG: Warning when carrier system unknown
+                showwarning(self.parent, plugin_tl("No System"), plugin_tl("Could not determine carrier's current system."))
                 return
             
             # Inara.cz commodity search URL format
@@ -3303,68 +3790,82 @@ class GalaxyGPS():
             
         except Exception:
             logger.warning('!! Error opening Inara Tritium search: ' + traceback.format_exc(), exc_info=False)
-            confirmDialog.showerror("Error", "Failed to open Inara Tritium search.")
+            # LANG: Error opening Inara tritium search
+            showerror(self.parent, plugin_tl("Error"), plugin_tl("Failed to open Inara Tritium search."))
+    
+    def fleet_carrier_system_url(self, system: str) -> str | None:
+        """
+        Generate URL for fleet carrier's current system.
+        Uses the configured system provider (EDSM/Inara/Spansh).
+        """
+        if not self.current_fc_system:
+            return None
+        
+        try:
+            import plug  # type: ignore
+            from config import config  # type: ignore
+            
+            # Use the same provider as main EDMC system display
+            provider = config.get_str('system_provider', default='EDSM')
+            url = plug.invoke(provider, 'EDSM', 'system_url', self.current_fc_system)
+            return url
+        except Exception as e:
+            logger.warning(f'!! Error generating FC system URL: {e}')
+            return None
     
     def update_fleet_carrier_system_display(self):
         """
-        Update the fleet carrier system location display under the dropdown.
-        Mirrors exactly how the "View All" window displays the system column.
+        Display the current system for the selected fleet carrier.
+        Reads directly from FleetCarrierManager cache.
         """
         if not self.fleet_carrier_system_label:
             return
         
         try:
-            # Get all carriers from CSV (same as "View All" window)
-            carriers = self.get_all_fleet_carriers()
-            if not carriers:
-                self.fleet_carrier_system_label.config(text="System: Unknown", foreground="gray")
+            # If no carrier selected, try to use the most recent one
+            callsign = self.selected_carrier_callsign
+            
+            if not callsign:
+                # No selection - try to get most recent carrier
+                carriers = self.get_all_fleet_carriers()
+                if carriers:
+                    sorted_carriers = sorted(carriers, key=lambda x: x.get('last_updated', ''), reverse=True)
+                    callsign = sorted_carriers[0].get('callsign', '') if sorted_carriers else None
+            
+            if not callsign:
+                self.current_fc_system = None
+                self.fleet_carrier_system_name['text'] = "Unknown"
+                self.fleet_carrier_system_name['url'] = None
                 return
             
-            # Find the selected carrier by callsign (same logic as "View All" window)
-            # Use case-insensitive matching and strip whitespace to be more robust
-            carrier = None
-            if self.selected_carrier_callsign:
-                selected_callsign_clean = self.selected_carrier_callsign.strip().upper()
-                for c in carriers:
-                    carrier_callsign_clean = c.get('callsign', '').strip().upper()
-                    if carrier_callsign_clean == selected_callsign_clean:
-                        carrier = c
-                        break
-            
-            # If no carrier selected, use the most recently updated carrier (same as "View All" window)
-            if not carrier:
-                try:
-                    sorted_carriers = sorted(
-                        carriers,
-                        key=lambda x: x.get('last_updated', ''),
-                        reverse=True
-                    )
-                    if sorted_carriers:
-                        carrier = sorted_carriers[0]
-                except (KeyError, IndexError, TypeError):
-                    # If sorting fails, just use first carrier
-                    if carriers:
-                        carrier = carriers[0]
-            
-            # Get system exactly as "View All" window does (line 2735: system = carrier.get('current_system', 'Unknown'))
-            if carrier:
-                # Use exact same logic as "View All" window
-                system = carrier.get('current_system', 'Unknown')
-                # Handle empty/whitespace strings - treat as 'Unknown' (same as "View All" window would display)
-                if not system or (isinstance(system, str) and not system.strip()):
-                    system = 'Unknown'
-                
-                # Display exactly as shown in "View All" window (line 2874 displays system directly)
-                # If system is 'Unknown' or empty, show grayed out
-                if system and system != 'Unknown':
-                    self.fleet_carrier_system_label.config(text=f"System: {system}", foreground="")
+            # Get carrier data directly from manager
+            if self.fleet_carrier_manager:
+                carrier = self.fleet_carrier_manager.get_carrier(callsign)
+                if carrier:
+                    system = carrier.get('current_system', '').strip()
+                    if system:
+                        # Store system name for URL generation
+                        self.current_fc_system = system
+                        # Update the hyperlink label with the system name
+                        self.fleet_carrier_system_name['text'] = system
+                        self.fleet_carrier_system_name['url'] = self.fleet_carrier_system_url
+                    else:
+                        self.current_fc_system = None
+                        self.fleet_carrier_system_name['text'] = "Unknown"
+                        self.fleet_carrier_system_name['url'] = None
                 else:
-                    self.fleet_carrier_system_label.config(text="System: Unknown", foreground="gray")
+                    self.current_fc_system = None
+                    self.fleet_carrier_system_name['text'] = "Unknown"
+                    self.fleet_carrier_system_name['url'] = None
             else:
-                self.fleet_carrier_system_label.config(text="System: Unknown", foreground="gray")
+                self.current_fc_system = None
+                self.fleet_carrier_system_name['text'] = "Unknown"
+                self.fleet_carrier_system_name['url'] = None
         except Exception:
             logger.warning('!! Error updating fleet carrier system display: ' + traceback.format_exc(), exc_info=False)
-            self.fleet_carrier_system_label.config(text="System: Unknown", foreground="gray")
+            self.current_fc_system = None
+            self.fleet_carrier_system_name['text'] = "Unknown"
+            self.fleet_carrier_system_name['url'] = None
     
     def find_tritium_near_current_system(self):
         """
@@ -3375,7 +3876,8 @@ class GalaxyGPS():
             # Get all carriers from CSV (same as "View All" window)
             carriers = self.get_all_fleet_carriers()
             if not carriers:
-                confirmDialog.showwarning("No Carrier Data", "No fleet carrier data available.")
+                # LANG: Warning when no carrier data available
+                showwarning(self.parent, plugin_tl("No Carrier Data"), plugin_tl("No fleet carrier data available."))
                 return
             
             # Find the selected carrier by callsign
@@ -3405,10 +3907,12 @@ class GalaxyGPS():
             if carrier:
                 carrier_system = carrier.get('current_system', '').strip()
                 if not carrier_system:
-                    confirmDialog.showwarning("No System", "Could not determine carrier's current system location.")
+                    # LANG: Warning when carrier system location unknown
+                    showwarning(self.parent, plugin_tl("No System"), plugin_tl("Could not determine carrier's current system location."))
                     return
             else:
-                confirmDialog.showwarning("No Carrier", "No fleet carrier selected.")
+                # LANG: Warning when no carrier selected
+                showwarning(self.parent, plugin_tl("No Carrier"), plugin_tl("No fleet carrier selected."))
                 return
             
             # Inara.cz commodity search URL format
@@ -3419,8 +3923,61 @@ class GalaxyGPS():
             
         except Exception:
             logger.warning('!! Error opening Inara Tritium search near carrier system: ' + traceback.format_exc(), exc_info=False)
-            confirmDialog.showerror("Error", "Failed to open Inara Tritium search.")
+            # LANG: Error opening Inara tritium search
+            showerror(self.parent, plugin_tl("Error"), plugin_tl("Failed to open Inara Tritium search."))
     
+    def _run_rings_worker(self, callsign, carrier_system, result_queue):
+        """Worker: query EDSM for system bodies (icy/pristine rings) off main thread, put result in queue."""
+        has_icy_rings = False
+        has_pristine = False
+        try:
+            encoded_system = urllib.parse.quote(carrier_system)
+            url = f"https://www.edsm.net/api-system-v1/bodies?systemName={encoded_system}"
+            session = timeout_session.new_session()
+            session.headers['User-Agent'] = user_agent + ' GalaxyGPS'
+            response = session.get(url, timeout=5)
+            if response.status_code == 200:
+                system_data = response.json()
+                if 'bodies' in system_data and isinstance(system_data['bodies'], list):
+                    for body in system_data['bodies']:
+                        if 'rings' in body and isinstance(body['rings'], list):
+                            for ring in body['rings']:
+                                ring_type = ring.get('type', '').strip()
+                                reserve_level = ring.get('reserveLevel', '').strip()
+                                if ring_type.lower() == 'icy':
+                                    has_icy_rings = True
+                                    if reserve_level.lower() == 'pristine':
+                                        has_pristine = True
+                                        break
+                            if has_icy_rings and has_pristine:
+                                break
+                if self.fleet_carrier_manager:
+                    self.fleet_carrier_manager.update_rings_status(callsign, has_icy_rings, has_pristine)
+        except requests.RequestException as e:
+            logger.warning(f'!! Error querying EDSM API for system bodies: {e}')
+            has_icy_rings = False
+            has_pristine = False
+        except Exception:
+            logger.warning('!! Error checking fleet carrier rings status: ' + traceback.format_exc(), exc_info=False)
+            has_icy_rings = False
+            has_pristine = False
+        result_queue.put({'has_icy_rings': has_icy_rings, 'has_pristine': has_pristine})
+
+    def _poll_rings_result(self, result_queue):
+        """Main-thread polling: when rings worker puts result, update vars and redraw toggles."""
+        if getattr(config, 'shutting_down', False):
+            return
+        try:
+            r = result_queue.get_nowait()
+        except queue.Empty:
+            if hasattr(self, 'frame') and self.frame:
+                self.frame.after(200, lambda: self._poll_rings_result(result_queue))
+            return
+        self.fleet_carrier_icy_rings_var.set(r['has_icy_rings'])
+        self.fleet_carrier_pristine_var.set(r['has_pristine'])
+        self._draw_icy_rings_toggle()
+        self._draw_pristine_toggle()
+
     def update_fleet_carrier_rings_status(self):
         """
         Update the Icy Rings and Pristine checkboxes from CSV data.
@@ -3432,17 +3989,14 @@ class GalaxyGPS():
             return
         
         try:
-            # Get all carriers from CSV (same as "View All" window)
             carriers = self.get_all_fleet_carriers()
             if not carriers:
-                # No carriers available, uncheck both
                 self.fleet_carrier_icy_rings_var.set(False)
                 self.fleet_carrier_pristine_var.set(False)
                 self._draw_icy_rings_toggle()
                 self._draw_pristine_toggle()
                 return
             
-            # Find the selected carrier by callsign
             carrier = None
             callsign = None
             if self.selected_carrier_callsign:
@@ -3452,7 +4006,6 @@ class GalaxyGPS():
                         callsign = c.get('callsign', '').strip()
                         break
             
-            # If no carrier selected, use the most recently updated carrier
             if not carrier:
                 try:
                     sorted_carriers = sorted(
@@ -3464,13 +4017,11 @@ class GalaxyGPS():
                         carrier = sorted_carriers[0]
                         callsign = carrier.get('callsign', '').strip()
                 except (KeyError, IndexError, TypeError):
-                    # If sorting fails, just use first carrier
                     if carriers:
                         carrier = carriers[0]
                         callsign = carrier.get('callsign', '').strip()
             
             if not carrier or not callsign:
-                # No carrier available, uncheck both
                 self.fleet_carrier_icy_rings_var.set(False)
                 self.fleet_carrier_pristine_var.set(False)
                 self._draw_icy_rings_toggle()
@@ -3479,93 +4030,46 @@ class GalaxyGPS():
             
             carrier_system = carrier.get('current_system', '').strip()
             if not carrier_system:
-                # No system available, uncheck both
                 self.fleet_carrier_icy_rings_var.set(False)
                 self.fleet_carrier_pristine_var.set(False)
                 self._draw_icy_rings_toggle()
                 self._draw_pristine_toggle()
                 return
             
-            # First, check if we have stored data in CSV
             icy_rings_stored = carrier.get('icy_rings', '').strip()
             pristine_stored = carrier.get('pristine', '').strip()
-            
             has_icy_rings = False
             has_pristine = False
             need_api_query = False
             
-            # Check if we have valid stored data
             if icy_rings_stored.lower() in ['yes', 'no'] and pristine_stored.lower() in ['yes', 'no']:
-                # We have stored data, use it
                 has_icy_rings = (icy_rings_stored.lower() == 'yes')
                 has_pristine = (pristine_stored.lower() == 'yes')
             else:
-                # No stored data, need to query API
                 need_api_query = True
                 logger.info(f"No stored rings status for carrier {callsign} in system {carrier_system}, querying API")
             
-            # Query EDSM API only if data is missing
             if need_api_query:
-                try:
-                    encoded_system = urllib.parse.quote(carrier_system)
-                    url = f"https://www.edsm.net/api-system-v1/bodies?systemName={encoded_system}"
-                    
-                    response = requests.get(url, timeout=5, headers={'User-Agent': 'EDMC_GalaxyGPS'})
-                    
-                    if response.status_code == 200:
-                        system_data = response.json()
-                        
-                        # Check if system data has bodies
-                        if 'bodies' in system_data and isinstance(system_data['bodies'], list):
-                            for body in system_data['bodies']:
-                                # Check if body has rings
-                                if 'rings' in body and isinstance(body['rings'], list):
-                                    for ring in body['rings']:
-                                        ring_type = ring.get('type', '').strip()
-                                        reserve_level = ring.get('reserveLevel', '').strip()
-                                        
-                                        # Check for Icy type (any reserve level)
-                                        if ring_type.lower() == 'icy':
-                                            has_icy_rings = True
-                                            
-                                            # Check for Pristine reserve level (only for Icy rings)
-                                            if reserve_level.lower() == 'pristine':
-                                                has_pristine = True
-                                                # Found both Icy and Pristine, can stop here
-                                                break
-                                    
-                                    # If we found both, no need to check more bodies
-                                    if has_icy_rings and has_pristine:
-                                        break
-                        
-                        # Store the results back to CSV via FleetCarrierManager
-                        if self.fleet_carrier_manager:
-                            self.fleet_carrier_manager.update_rings_status(callsign, has_icy_rings, has_pristine)
-                    
-                except requests.RequestException as e:
-                    logger.warning(f'!! Error querying EDSM API for system bodies: {e}')
-                    # On error, uncheck both but don't save to CSV
-                    has_icy_rings = False
-                    has_pristine = False
-                except Exception as e:
-                    logger.warning('!! Error checking fleet carrier rings status: ' + traceback.format_exc(), exc_info=False)
-                    # On error, uncheck both but don't save to CSV
-                    has_icy_rings = False
-                    has_pristine = False
+                if not (hasattr(self, 'frame') and self.frame):
+                    return
+                result_queue = queue.Queue()
+                threading.Thread(
+                    target=self._run_rings_worker,
+                    args=(callsign, carrier_system, result_queue),
+                    daemon=True,
+                ).start()
+                self.frame.after(200, lambda: self._poll_rings_result(result_queue))
+                return
             
-            # Update toggle buttons (from CSV data or API query result)
             self.fleet_carrier_icy_rings_var.set(has_icy_rings)
             self.fleet_carrier_pristine_var.set(has_pristine)
-            # Redraw the toggle buttons
             self._draw_icy_rings_toggle()
             self._draw_pristine_toggle()
                 
         except Exception:
             logger.warning('!! Error updating fleet carrier rings status: ' + traceback.format_exc(), exc_info=False)
-            # On error, uncheck both
             self.fleet_carrier_icy_rings_var.set(False)
             self.fleet_carrier_pristine_var.set(False)
-            # Redraw the toggle buttons
             self._draw_icy_rings_toggle()
             self._draw_pristine_toggle()
     
@@ -3647,92 +4151,75 @@ class GalaxyGPS():
     def _on_tritium_click(self):
         """Handle click on Tritium label - only if data is available"""
         if self.fleet_carrier_tritium_label:
-            # Only allow click if foreground is blue (data available), not gray (unknown)
-            if self.fleet_carrier_tritium_label.cget('foreground') == 'blue':
+            current_fg = self.fleet_carrier_tritium_label.cget('foreground')
+            logger.debug(f"[_on_tritium_click] Current foreground color: '{current_fg}'")
+            # Allow click if foreground is blue or darkblue (data available), not gray (unknown)
+            if current_fg in ('blue', 'darkblue'):
+                logger.info("[_on_tritium_click] Opening tritium search on Inara")
                 self.find_tritium_near_current_system()
+            else:
+                logger.debug(f"[_on_tritium_click] Click ignored - foreground is '{current_fg}', not blue/darkblue")
     
     def _on_tritium_enter(self):
         """Handle mouse enter on Tritium label - only if data is available"""
         if self.fleet_carrier_tritium_label:
             # Only show hover effect if foreground is blue (data available), not gray (unknown)
             if self.fleet_carrier_tritium_label.cget('foreground') == 'blue':
-                self.fleet_carrier_tritium_label.config(fg="darkblue", underline=True)
+                self.fleet_carrier_tritium_label.config(fg="darkblue")
     
     def _on_tritium_leave(self):
         """Handle mouse leave on Tritium label - only if data is available"""
         if self.fleet_carrier_tritium_label:
             # Only restore normal state if foreground was blue (data available), not gray (unknown)
             if self.fleet_carrier_tritium_label.cget('foreground') in ('blue', 'darkblue'):
-                self.fleet_carrier_tritium_label.config(fg="blue", underline=False)
+                self.fleet_carrier_tritium_label.config(fg="blue")
     
     def update_fleet_carrier_balance_display(self):
         """
-        Update the fleet carrier credit balance display below the Tritium display.
-        Mirrors exactly how the "View All" window displays the balance column.
+        Display the credit balance for the selected fleet carrier.
+        Reads directly from FleetCarrierManager cache.
         """
-        if not self.fleet_carrier_balance_label:
+        if not hasattr(self, 'fleet_carrier_balance_value') or not self.fleet_carrier_balance_value:
             return
         
         try:
-            # Get all carriers from CSV (same as "View All" window)
-            carriers = self.get_all_fleet_carriers()
-            if not carriers:
-                self.fleet_carrier_balance_label.config(text="Balance: Unknown", foreground="gray")
+            # If no carrier selected, try to use the most recent one
+            callsign = self.selected_carrier_callsign
+            
+            if not callsign:
+                # No selection - try to get most recent carrier
+                carriers = self.get_all_fleet_carriers()
+                if carriers:
+                    sorted_carriers = sorted(carriers, key=lambda x: x.get('last_updated', ''), reverse=True)
+                    callsign = sorted_carriers[0].get('callsign', '') if sorted_carriers else None
+            
+            if not callsign:
+                self.fleet_carrier_balance_value.config(text="Unknown", foreground="gray")
                 return
             
-            # Find the selected carrier by callsign (same logic as "View All" window)
-            # Use case-insensitive matching and strip whitespace to be more robust
-            carrier = None
-            if self.selected_carrier_callsign:
-                selected_callsign_clean = self.selected_carrier_callsign.strip().upper()
-                for c in carriers:
-                    carrier_callsign_clean = c.get('callsign', '').strip().upper()
-                    if carrier_callsign_clean == selected_callsign_clean:
-                        carrier = c
-                        break
-            
-            # If no carrier selected, use the most recently updated carrier (same as "View All" window)
-            if not carrier:
-                try:
-                    sorted_carriers = sorted(
-                        carriers,
-                        key=lambda x: x.get('last_updated', ''),
-                        reverse=True
-                    )
-                    if sorted_carriers:
-                        carrier = sorted_carriers[0]
-                except (KeyError, IndexError, TypeError):
-                    # If sorting fails, just use first carrier
-                    if carriers:
-                        carrier = carriers[0]
-            
-            # Get balance exactly as "View All" window does (lines 2740, 2748, 2767-2775)
-            if carrier:
-                balance_raw = carrier.get('balance')
-                
-                # Check if balance is missing (exact same logic as "View All" window line 2748)
-                balance_missing = 'balance' not in carrier or balance_raw is None or (isinstance(balance_raw, str) and balance_raw.strip() == '')
-                
-                if balance_missing:
-                    # Show "Unknown" instead of "Needs Update" for main UI (more user-friendly)
-                    self.fleet_carrier_balance_label.config(text="Balance: Unknown", foreground="gray")
+            # Get carrier data directly from manager
+            if self.fleet_carrier_manager:
+                carrier = self.fleet_carrier_manager.get_carrier(callsign)
+                if carrier:
+                    balance_raw = carrier.get('balance', '').strip()
+                    if balance_raw:
+                        try:
+                            balance_int = int(balance_raw)
+                            balance_formatted = f"{balance_int:,}"
+                            # Always green for valid balance
+                            self.fleet_carrier_balance_value.config(text=f"{balance_formatted} cr", foreground="green")
+                        except (ValueError, TypeError):
+                            self.fleet_carrier_balance_value.config(text=f"{balance_raw} cr", foreground="gray")
+                    else:
+                        self.fleet_carrier_balance_value.config(text="Unknown", foreground="gray")
                 else:
-                    # Format balance with commas (exact same logic as "View All" window lines 2771-2775)
-                    try:
-                        balance_int = int(balance_raw) if balance_raw else 0
-                        balance_formatted = f"{balance_int:,}"
-                        display_text = f"Balance: {balance_formatted} cr"
-                        self.fleet_carrier_balance_label.config(text=display_text, foreground="")
-                    except (ValueError, TypeError):
-                        # If conversion fails, try to display as string
-                        balance_formatted = str(balance_raw) if balance_raw else "Unknown"
-                        display_text = f"Balance: {balance_formatted} cr"
-                        self.fleet_carrier_balance_label.config(text=display_text, foreground="gray")
+                    self.fleet_carrier_balance_value.config(text="Unknown", foreground="gray")
             else:
-                self.fleet_carrier_balance_label.config(text="Balance: Unknown", foreground="gray")
+                self.fleet_carrier_balance_value.config(text="Unknown", foreground="gray")
         except Exception:
             logger.warning('!! Error updating fleet carrier balance display: ' + traceback.format_exc(), exc_info=False)
-            self.fleet_carrier_balance_label.config(text="Balance: Unknown", foreground="gray")
+            if hasattr(self, 'fleet_carrier_balance_value') and self.fleet_carrier_balance_value:
+                self.fleet_carrier_balance_value.config(text="Unknown", foreground="gray")
     
     def show_route_window(self):
         """
@@ -3741,738 +4228,18 @@ class GalaxyGPS():
         Shows all columns based on route type with checkboxes for yes/no fields.
         Highlights the current next waypoint row.
         """
+        logger.info(f"[GalaxyGPS.show_route_window] Button clicked! Calling windows.show_route_window()")
         try:
-            if not self.route or len(self.route) == 0:
-                confirmDialog.showinfo("View Route", "No route is currently loaded.")
-                return
-            
-            # If window is already open, close it first to refresh
-            if self.route_window_ref:
-                try:
-                    self.route_window_ref.destroy()
-                except:
-                    pass
-                self.route_window_ref = None
-            
-            # Use stored full CSV data if available (more efficient than reading file)
-            route_data = []
-            fieldnames = []
-            fieldname_map = {}
-            
-            if self.route_full_data and len(self.route_full_data) > 0:
-                # Use in-memory full data (preserves all columns from original CSV)
-                route_data = self.route_full_data
-                # Use preserved original fieldnames if available
-                if self.route_fieldnames:
-                    fieldnames = self.route_fieldnames
-                    fieldname_map = {name.lower(): name for name in fieldnames}
-                elif route_data:
-                    # Fallback: extract from first row keys (will be lowercase)
-                    fieldnames = list(route_data[0].keys())
-                    fieldname_map = {name.lower(): name for name in fieldnames}
-            elif os.path.exists(self.save_route_path):
-                # Fallback: read from saved CSV file
-                try:
-                    with open(self.save_route_path, 'r', encoding='utf-8-sig', newline='') as csvfile:
-                        reader = csv.DictReader(csvfile)
-                        fieldnames = reader.fieldnames if reader.fieldnames else []
-                        
-                        # Create case-insensitive fieldname mapping
-                        fieldname_map = {name.lower(): name for name in fieldnames}
-                        
-                        def get_field(row, field_name, default=""):
-                            """Get field value from row using case-insensitive lookup"""
-                            key = fieldname_map.get(field_name.lower(), field_name)
-                            value = row.get(key, default)
-                            # Convert None, "None", or empty strings to empty string
-                            if value is None or str(value).strip().lower() == 'none':
-                                return default
-                            return value
-                        
-                        # Read all rows and store all fields
-                        for row in reader:
-                            route_entry = {}
-                            for field_name in fieldnames:
-                                field_value = get_field(row, field_name, '')
-                                # Convert None, "None", or empty strings to empty string for display
-                                if field_value is None or str(field_value).strip().lower() == 'none':
-                                    field_value = ''
-                                route_entry[field_name.lower()] = field_value
-                            route_data.append(route_entry)
-                except Exception:
-                    logger.warning('!! Error reading route CSV for display: ' + traceback.format_exc(), exc_info=False)
-                    confirmDialog.showerror("Error", "Failed to read route CSV file.")
-                    return
-            else:
-                # No data available
-                confirmDialog.showwarning("Route File Not Found", "Route CSV file not found. Please import the route again.")
-                return
-            
-            if not route_data:
-                confirmDialog.showinfo("View Route", "No route data to display.")
-                return
-            
-            # Detect route type from CSV columns if not already set
-            # Check for Road to Riches by looking for Body Name column
-            if not self.roadtoriches and 'body name' in fieldname_map:
-                self.roadtoriches = True
-            
-            # Detect Fleet Carrier route if not already set (check for Restock Tritium or Icy Ring)
-            if not self.fleetcarrier:
-                if 'restock tritium' in fieldname_map or 'icy ring' in fieldname_map or 'pristine' in fieldname_map:
-                    self.fleetcarrier = True
-            
-            # Detect Galaxy route if not already set (check for Refuel column)
-            if not self.galaxy:
-                if 'refuel' in fieldname_map and self.system_header.lower() in fieldname_map:
-                    self.galaxy = True
-            
-            # Define columns to exclude based on route type
-            exclude_columns = set()
-            checkbox_columns = set()
-            
-            # Fleet Carrier routes: exclude Tritium in tank and Tritium in market
-            if self.fleetcarrier:
-                exclude_columns.add('tritium in tank')
-                exclude_columns.add('tritium in market')
-                # Checkbox columns for fleet carrier
-                if 'icy ring' in fieldname_map:
-                    checkbox_columns.add('icy ring')
-                if 'pristine' in fieldname_map:
-                    checkbox_columns.add('pristine')
-                if 'restock tritium' in fieldname_map:
-                    checkbox_columns.add('restock tritium')
-            
-            # Galaxy routes: Refuel and Neutron Star are checkboxes
-            if self.galaxy:
-                if 'refuel' in fieldname_map:
-                    checkbox_columns.add('refuel')
-                if 'neutron star' in fieldname_map:
-                    checkbox_columns.add('neutron star')
-            
-            # Road to Riches: Is Terraformable is checkbox
-            if self.roadtoriches:
-                if 'is terraformable' in fieldname_map:
-                    checkbox_columns.add('is terraformable')
-            
-            # Neutron Star checkbox: Add for any route type that has this column (except fleet carrier)
-            # This ensures Neutron Star shows up for galaxy routes, neutron routes, and any other route type
-            if not self.fleetcarrier and 'neutron star' in fieldname_map:
-                checkbox_columns.add('neutron star')
-            
-            # Also detect galaxy route type from CSV if not already set
-            if not self.galaxy and 'refuel' in fieldname_map and self.system_header.lower() in fieldname_map:
-                self.galaxy = True
-                if 'refuel' in fieldname_map:
-                    checkbox_columns.add('refuel')
-                if 'neutron star' in fieldname_map:
-                    checkbox_columns.add('neutron star')
-            
-            # Build list of columns to display
-            # Use original fieldnames if available
-            display_columns = []
-            if fieldnames:
-                # Use original fieldnames from CSV header
-                for field in fieldnames:
-                    field_lower = field.lower()
-                    # Always exclude excluded columns
-                    if field_lower in exclude_columns:
-                        continue
-                    display_columns.append(field)
-            elif route_data and len(route_data) > 0:
-                # Fallback: use keys from first route entry (convert back to title case if possible)
-                for key in route_data[0].keys():
-                    if key not in exclude_columns:
-                        # Convert key back to title case for display (e.g., "system name" -> "System Name")
-                        display_name = key.replace('_', ' ').title()
-                        display_columns.append(display_name)
-            
-            # For Road to Riches, track previous system name to avoid repetition
-            prev_system_name = None
-            
-            # Create new window
-            route_window = tk.Toplevel(self.parent)
-            route_window.title("Route View")
-            
-            # Store reference to this window for dynamic updates
-            self.route_window_ref = route_window
-            
-            # Clean up reference when window is closed
-            def on_window_close():
-                if self.route_window_ref == route_window:
-                    self.route_window_ref = None
-                route_window.destroy()
-            
-            route_window.protocol("WM_DELETE_WINDOW", on_window_close)
-            
-            # Create main container with horizontal and vertical scrolling
-            main_frame = tk.Frame(route_window)
-            main_frame.pack(fill=tk.BOTH, expand=True)
-            theme.update(main_frame)
-            
-            # Create horizontal scrollbar
-            h_scrollbar = ttk.Scrollbar(main_frame, orient=tk.HORIZONTAL)
-            h_scrollbar.pack(side=tk.BOTTOM, fill=tk.X)
-            
-            # Create vertical scrollbar
-            v_scrollbar = ttk.Scrollbar(main_frame, orient=tk.VERTICAL)
-            v_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
-            
-            # Create canvas with both scrollbars
-            canvas = ThemeSafeCanvas(main_frame,
-                             xscrollcommand=h_scrollbar.set,
-                             yscrollcommand=v_scrollbar.set)
-            canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-            theme.update(canvas)
-            
-            h_scrollbar.config(command=canvas.xview)
-            v_scrollbar.config(command=canvas.yview)
-            
-            scrollable_frame = tk.Frame(canvas)
-            
-            canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
-            theme.update(scrollable_frame)
-            
-            # Update canvas scroll region when frame size changes
-            def on_frame_configure(event):
-                canvas.configure(scrollregion=canvas.bbox("all"))
-                # Update canvas window width to match canvas width for proper horizontal scrolling
-                canvas_width = canvas.winfo_width()
-                if canvas_width > 1:  # Only update if canvas has been rendered
-                    canvas_window_id = canvas.find_all()
-                    if canvas_window_id:
-                        canvas.itemconfig(canvas_window_id[0], width=canvas_width)
-            
-            scrollable_frame.bind("<Configure>", on_frame_configure)
-            
-            # Also bind to canvas resize
-            def on_canvas_configure(event):
-                canvas_width = event.width
-                canvas_window_id = canvas.find_all()
-                if canvas_window_id:
-                    canvas.itemconfig(canvas_window_id[0], width=canvas_width)
-            
-            canvas.bind('<Configure>', on_canvas_configure)
-            
-            # Create a single table frame that will contain both header and data rows in one grid
-            table_frame = tk.Frame(scrollable_frame)
-            table_frame.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
-            theme.update(table_frame)
-            # Force update to ensure theme colors are applied before reading background
-            table_frame.update_idletasks()
-            
-            # Add step number as first column, and EDSM button before System Name
-            # Check if System Name is in display_columns and insert EDSM before it
-            display_columns_with_edsm = []
-            edsm_inserted = False
-            system_name_index = -1
-            for idx, col in enumerate(display_columns):
-                if col.lower() == self.system_header.lower() and not edsm_inserted:
-                    system_name_index = idx
-                    display_columns_with_edsm.append("EDSM")
-                    edsm_inserted = True
-                display_columns_with_edsm.append(col)
-            
-            # If System Name wasn't found, just add EDSM at the beginning (after step number)
-            if not edsm_inserted:
-                display_columns_with_edsm = ["EDSM"] + display_columns
-            
-            headers = ["#"] + display_columns_with_edsm
-            # Calculate column widths based on both header and data content
-            # Start with header widths
-            column_widths = [4] + [6 if h == "EDSM" else max(15, len(h)) for h in display_columns_with_edsm]
-            
-            # Now check all data rows to find maximum content width for each column
-            # Iterate through headers (skip step number "#" at index 0)
-            for header_idx, header_name in enumerate(display_columns_with_edsm, start=1):
-                # Skip EDSM column (it's fixed width at 6)
-                if header_name == "EDSM":
-                    continue
-                
-                # Find corresponding field in display_columns
-                field_lower = header_name.lower()
-                
-                # Check all route entries for this column
-                for idx, route_entry in enumerate(route_data):
-                    # Get value from route_entry
-                    raw_value = route_entry.get(field_lower, '')
-                    if raw_value is None or str(raw_value).strip().lower() == 'none':
-                        value = ''
-                    else:
-                        value = str(raw_value).strip() if isinstance(raw_value, str) else str(raw_value)
-                    
-                    # For Road to Riches, handle system name repetition
-                    if self.roadtoriches and field_lower == self.system_header.lower():
-                        # Use previous system name if current is empty
-                        if not value and idx > 0:
-                            prev_entry = route_data[idx - 1]
-                            if field_lower in prev_entry:
-                                value = prev_entry.get(field_lower, '').strip()
-                    
-                    # Calculate width needed for this value (add 2 for padding)
-                    if value:
-                        value_width = len(str(value))
-                        # Update column width if this value is wider
-                        # header_idx corresponds to column_widths index (header_idx already accounts for step number)
-                        if header_idx < len(column_widths):
-                            column_widths[header_idx] = max(column_widths[header_idx], value_width + 2)
-            
-            # Calculate required width based on columns (after column_widths is defined)
-            # More accurate estimate: column_widths * 8-10 pixels per character + padding + separators
-            # Account for separators (one between each column, ~2px each)
-            num_separators = len(headers) - 1
-            separator_width = num_separators * 2
-            # Use 9 pixels per character width for more accurate sizing
-            total_column_width = sum(column_widths) * 9 + separator_width + 200  # Add padding for buttons/scrollbars/margins
-            screen_width = route_window.winfo_screenwidth()
-            # Open window wide enough to show all columns, but don't exceed screen width
-            # If content is wider than screen, user can scroll horizontally
-            window_width = min(total_column_width, screen_width - 20)  # Leave small margin from screen edges
-            # Ensure minimum width so content isn't cut off
-            window_width = max(window_width, 800)  # At least 800px wide
-            
-            # Determine which columns should be right-aligned (numeric columns)
-            # Exclude checkbox columns (Refuel, Neutron Star, etc.) - they should be left-aligned
-            numeric_columns = set()
-            checkbox_column_names = set(checkbox_columns)
-            for field_name in display_columns:
-                field_lower = field_name.lower()
-                # Only right-align pure numeric columns, not checkbox columns
-                if field_lower not in checkbox_column_names:
-                    if any(keyword in field_lower for keyword in ['distance', 'fuel used', 'fuel left', 'estimated scan value', 'estimated mapping value', 'jumps']):
-                        numeric_columns.add(field_lower)
-            
-            # Header row (row 0) - styled with grey background and bold text
-            header_row = 0
-            for i, header in enumerate(headers):
-                width = column_widths[i] if i < len(column_widths) else 20
-                # Cap width at reasonable maximum (but use same logic as data cells)
-                width = min(width, 30) if i > 0 else width
-                # Right-align numeric columns, left-align text columns, center-align checkbox columns
-                header_lower = header.lower()
-                if i == 0:  # Step number - left align
-                    anchor = "w"
-                    sticky_val = tk.W
-                elif header_lower == "edsm":  # EDSM button column - center align
-                    anchor = "c"
-                    sticky_val = tk.EW
-                elif header_lower in checkbox_columns:
-                    anchor = "c"  # Center-align for indicator columns (colored dots)
-                    sticky_val = tk.EW  # Expand to fill column width for centering
-                elif header_lower in numeric_columns:
-                    anchor = "e"  # Right-align for numeric columns
-                    sticky_val = tk.E
-                else:
-                    anchor = "w"  # Left-align for text columns
-                    sticky_val = tk.W
-                # Header label with grey background and bold text
-                label = tk.Label(table_frame, text=header, font=("Arial", 9, "bold"), width=width, anchor=anchor)
-                label.grid(row=header_row, column=i*2, padx=2, pady=5, sticky=sticky_val)
-                theme.update(label)
-                # Add vertical separator after each column (except the last)
-                if i < len(headers) - 1:
-                    separator = ttk.Separator(table_frame, orient=tk.VERTICAL)
-                    separator.grid(row=header_row, column=i*2+1, padx=0, pady=2, sticky=tk.NS)
-                    theme.update(separator)
-                    # ttk.Separator needs additional styling via ttk.Style
-                    # We'll configure this after all widgets are created
-            
-            # Get current next waypoint system name for highlighting
-            current_next_waypoint = getattr(self, 'next_stop', None)
-            if current_next_waypoint and current_next_waypoint == "No route planned":
-                current_next_waypoint = None
-            
-            # Route data rows (rows 1+) - use same grid as header for perfect alignment
-            for idx, route_entry in enumerate(route_data):
-                data_row = idx + 1  # Start from row 1 (row 0 is header)
-                
-                # Get system name from this row for comparison
-                # For Road to Riches, we need to track the actual system name even if it's not displayed
-                system_name_in_row = None
-                system_field_lower = self.system_header.lower()
-                if system_field_lower in route_entry:
-                    system_name_in_row = route_entry.get(system_field_lower, '').strip()
-                
-                # For Road to Riches, if system name is empty in this row, use previous system name
-                if self.roadtoriches and not system_name_in_row and idx > 0:
-                    # Check previous entry for system name
-                    prev_entry = route_data[idx - 1]
-                    if system_field_lower in prev_entry:
-                        system_name_in_row = prev_entry.get(system_field_lower, '').strip()
-                
-                # Check if this row matches the current next waypoint
-                is_current_waypoint = False
-                if current_next_waypoint and system_name_in_row:
-                    # Case-insensitive comparison
-                    if system_name_in_row.lower() == current_next_waypoint.lower():
-                        is_current_waypoint = True
-                
-                # Get row background color from theme AFTER theme.update() has been applied
-                # Highlight current waypoint with yellow background - text color handled by theme
-                try:
-                    base_bg = table_frame.cget('bg')
-                    # Use theme background color, not hardcoded white
-                    # Empty string means let theme handle it completely
-                    row_bg = base_bg if base_bg and base_bg.lower() not in ['white', '#ffffff', 'systemwindow'] else ""
-                    if is_current_waypoint:
-                        # Always use yellow highlight - theme system will adjust text color for readability
-                        row_bg = "#fff9c4"  # Light yellow highlight for current waypoint
-                except:
-                    if is_current_waypoint:
-                        row_bg = "#fff9c4"
-                    else:
-                        row_bg = ""  # Empty string allows theme to handle it
-                
-                col_idx = 0
-                
-                # Step number - use exact same width calculation as header for perfect alignment
-                step_width = column_widths[0] if col_idx < len(column_widths) else 4
-                # Ensure width matches header exactly (header doesn't cap step number width)
-                label_kwargs = {"master": table_frame, "text": str(idx + 1), "width": step_width, "anchor": "w"}
-                if row_bg:
-                    label_kwargs["bg"] = row_bg
-                step_label = tk.Label(**label_kwargs)
-                step_label.grid(row=data_row, column=col_idx*2, padx=2, pady=5, sticky=tk.W)
-                theme.update(step_label)
-                # For highlighted rows, set text to black for readability (except URLs which stay blue)
-                if is_current_waypoint:
-                    step_label.config(foreground="black")
-                # Add separator after step number
-                if col_idx < len(headers) - 1:
-                    separator_step = ttk.Separator(table_frame, orient=tk.VERTICAL)
-                    separator_step.grid(row=data_row, column=col_idx*2+1, padx=0, pady=2, sticky=tk.NS)
-                    theme.update(separator_step)
-                col_idx += 1
-                
-                # Display each column - use column_widths to match header widths
-                # Note: We iterate through display_columns but need to account for EDSM column before System Name
-                for field_idx, field_name in enumerate(display_columns):
-                    field_lower = field_name.lower()
-                    # Get value from route_entry (which uses lowercase keys)
-                    raw_value = route_entry.get(field_lower, '')
-                    # Convert to string and handle None/"None" values
-                    if raw_value is None or str(raw_value).strip().lower() == 'none':
-                        value = ''
-                    else:
-                        value = str(raw_value).strip() if isinstance(raw_value, str) else str(raw_value)
-                    
-                    # Special handling: Add EDSM button before System Name
-                    if field_lower == self.system_header.lower():
-                        # EDSM column comes right before System Name in headers
-                        # Add EDSM button first
-                        edsm_col_width = column_widths[col_idx] if col_idx < len(column_widths) else 6
-                        
-                        # Get the system name value for EDSM button
-                        system_name_for_edsm = None
-                        if self.roadtoriches:
-                            current_system = value
-                            system_name_for_edsm = current_system if current_system and current_system.lower() != prev_system_name else None
-                        else:
-                            system_name_for_edsm = value if value else None
-                        
-                        if system_name_for_edsm:
-                            btn_kwargs = {"master": table_frame, "text": "EDSM", "command": lambda s=system_name_for_edsm: self.open_edsm_system(s), "width": edsm_col_width}
-                            if row_bg:
-                                btn_kwargs["bg"] = row_bg
-                            edsm_btn = tk.Button(**btn_kwargs)
-                            edsm_btn.grid(row=data_row, column=col_idx*2, padx=2, pady=5, sticky=tk.W)
-                            theme.update(edsm_btn)
-                        else:
-                            # Empty cell if no system name
-                            label_kwargs = {"master": table_frame, "text": "", "width": edsm_col_width}
-                            if row_bg:
-                                label_kwargs["bg"] = row_bg
-                            empty_label = tk.Label(**label_kwargs)
-                            empty_label.grid(row=data_row, column=col_idx*2, padx=2, pady=5, sticky=tk.W)
-                            theme.update(empty_label)
-                            # For highlighted rows, set text to black for readability
-                            if is_current_waypoint:
-                                empty_label.config(foreground="black")
-                        if col_idx < len(headers) - 1:
-                            separator_edsm = ttk.Separator(table_frame, orient=tk.VERTICAL)
-                            separator_edsm.grid(row=data_row, column=col_idx*2+1, padx=0, pady=2, sticky=tk.NS)
-                            theme.update(separator_edsm)
-                        col_idx += 1
-                        
-                        # Now add System Name at the next column position
-                        # Get width for System Name column
-                        col_width = column_widths[col_idx] if col_idx < len(column_widths) else max(15, len(field_name))
-                        col_width = min(col_width, 30) if col_idx > 0 else col_width
-                        
-                        # Handle System Name display
-                        # For Road to Riches, check if system name repeats
-                        if self.roadtoriches:
-                            current_system = value
-                            if current_system and current_system.lower() == prev_system_name:
-                                # System name repeats, show empty
-                                label_kwargs = {"master": table_frame, "text": "", "width": col_width, "anchor": "w"}
-                                if row_bg:
-                                    label_kwargs["bg"] = row_bg
-                                system_label = tk.Label(**label_kwargs)
-                                system_label.grid(row=data_row, column=col_idx*2, padx=2, pady=5, sticky=tk.W)
-                                theme.update(system_label)
-                                # For highlighted rows, set text to black for readability
-                                if is_current_waypoint:
-                                    system_label.config(foreground="black")
-                            else:
-                                # New system name, display it
-                                if current_system:
-                                    label_kwargs = {"master": table_frame, "text": current_system, "fg": "blue", "cursor": "hand2", "width": col_width, "anchor": "w"}
-                                    if row_bg:
-                                        label_kwargs["bg"] = row_bg
-                                    system_label = tk.Label(**label_kwargs)
-                                    system_label.grid(row=data_row, column=col_idx*2, padx=2, pady=5, sticky=tk.W)
-                                    theme.update(system_label)
-                                    # System names are URLs/links with fg="blue" - keep them blue, don't change to black
-                                    system_label.bind("<Button-1>", lambda e, s=current_system: self.open_inara_system(s))
-                                    system_label.bind("<Enter>", lambda e, lbl=system_label: lbl.config(fg="darkblue", underline=True))
-                                    system_label.bind("<Leave>", lambda e, lbl=system_label: lbl.config(fg="blue", underline=False))
-                                else:
-                                    label_kwargs = {"master": table_frame, "text": "", "width": col_width, "anchor": "w"}
-                                    if row_bg:
-                                        label_kwargs["bg"] = row_bg
-                                    empty_label = tk.Label(**label_kwargs)
-                                    empty_label.grid(row=data_row, column=col_idx*2, padx=2, pady=5, sticky=tk.W)
-                                    theme.update(empty_label)
-                                    # For highlighted rows, set text to black for readability
-                                    if is_current_waypoint:
-                                        empty_label.config(foreground="black")
-                            prev_system_name = current_system.lower() if current_system else None
-                        else:
-                            # Normal system name display (clickable to Inara)
-                            if value:
-                                label_kwargs = {"master": table_frame, "text": value, "fg": "blue", "cursor": "hand2", "width": col_width, "anchor": "w"}
-                                if row_bg:
-                                    label_kwargs["bg"] = row_bg
-                                system_label = tk.Label(**label_kwargs)
-                                system_label.grid(row=data_row, column=col_idx*2, padx=2, pady=5, sticky=tk.W)
-                                theme.update(system_label)
-                                # System names are URLs/links with fg="blue" - keep them blue, don't change to black
-                                system_label.bind("<Button-1>", lambda e, s=value: self.open_inara_system(s))
-                                system_label.bind("<Enter>", lambda e, lbl=system_label: lbl.config(fg="darkblue", underline=True))
-                                system_label.bind("<Leave>", lambda e, lbl=system_label: lbl.config(fg="blue", underline=False))
-                            else:
-                                label_kwargs = {"master": table_frame, "text": "", "width": col_width, "anchor": "w"}
-                                if row_bg:
-                                    label_kwargs["bg"] = row_bg
-                                empty_label = tk.Label(**label_kwargs)
-                                empty_label.grid(row=data_row, column=col_idx*2, padx=2, pady=5, sticky=tk.W)
-                                theme.update(empty_label)
-                                # For highlighted rows, set text to black for readability
-                                if is_current_waypoint:
-                                    empty_label.config(foreground="black")
-                        
-                        # Add separator after System Name and move to next column
-                        if col_idx < len(headers) - 1:
-                            separator_system = ttk.Separator(table_frame, orient=tk.VERTICAL)
-                            separator_system.grid(row=data_row, column=col_idx*2+1, padx=0, pady=2, sticky=tk.NS)
-                            theme.update(separator_system)
-                        col_idx += 1
-                        continue  # Skip the rest of the loop for System Name since we've handled it
-                    
-                    # Get width from column_widths array for non-System Name columns
-                    # Use exact same width calculation as header for perfect alignment
-                    col_width = column_widths[col_idx] if col_idx < len(column_widths) else max(15, len(field_name))
-                    # Apply same width cap as headers
-                    col_width = min(col_width, 30) if col_idx > 0 else col_width
-                    
-                    # Checkbox columns (yes/no fields) - display as colored dot indicator
-                    if field_lower in checkbox_columns:
-                        # Strip whitespace and convert to lowercase for comparison
-                        checkbox_value_str = str(value).strip().lower() if value else ''
-                        checkbox_value = checkbox_value_str == 'yes'
-                        
-                        # Determine dot color based on field type
-                        # Neutron Star uses light blue, others use red
-                        if field_lower == 'neutron star':
-                            dot_color = "lightblue"
-                            dot_outline = "blue"
-                        else:
-                            dot_color = "red"
-                            dot_outline = "darkred"
-                        
-                        # Create a frame to center the canvas within the column
-                        frame_kwargs = {"master": table_frame}
-                        if row_bg:
-                            frame_kwargs["bg"] = row_bg
-                        checkbox_frame = tk.Frame(**frame_kwargs)
-                        checkbox_frame.grid(row=data_row, column=col_idx*2, padx=2, pady=5, sticky=tk.EW)
-                        theme.update(checkbox_frame)
-                        
-                        # Create a canvas to draw a colored dot (centered in frame)
-                        canvas_kwargs = {"master": checkbox_frame, "width": 20, "height": 20, "highlightthickness": 0}
-                        if row_bg:
-                            canvas_kwargs["bg"] = row_bg
-                        checkbox_canvas = ThemeSafeCanvas(**canvas_kwargs)
-                        checkbox_canvas.pack(anchor=tk.CENTER)  # Center the canvas in the frame
-                        
-                        if checkbox_value:
-                            # Draw a filled circle for "yes" (light blue for neutron star, red for others)
-                            checkbox_canvas.create_oval(5, 5, 15, 15, fill=dot_color, outline=dot_outline, width=1)
-                        else:
-                            # Draw an empty circle for "no" (or leave blank)
-                            checkbox_canvas.create_oval(5, 5, 15, 15, fill=row_bg, outline="lightgray", width=1)
-                    
-                    # Regular text columns - right-align numeric columns, left-align others
-                    else:
-                        # Determine if this is a numeric column
-                        is_numeric = field_lower in numeric_columns
-                        
-                        # Process the value - handle None, "None", empty strings
-                        display_value = value if value else ""
-                        if display_value is None or str(display_value).strip().lower() == 'none':
-                            display_value = ""
-                        
-                        # Round distance and fuel columns UP to nearest hundredth if they're numeric
-                        if is_numeric and field_lower in ["distance to arrival", "distance remaining", "distance", "fuel used", "fuel left"]:
-                            if display_value:  # Only process if not empty
-                                try:
-                                    val_float = float(display_value)
-                                    # Round UP to nearest hundredth: multiply by 100, ceil, divide by 100
-                                    rounded = math.ceil(val_float * 100) / 100
-                                    display_value = f"{rounded:.2f}"
-                                except (ValueError, TypeError):
-                                    pass  # Keep original value if not a number
-                        
-                        anchor = "e" if is_numeric else "w"
-                        sticky = tk.E if is_numeric else tk.W
-                        # Use col_width which now matches header width calculation exactly
-                        label_kwargs = {"master": table_frame, "text": display_value, "width": col_width, "anchor": anchor}
-                        if row_bg:
-                            label_kwargs["bg"] = row_bg
-                        value_label = tk.Label(**label_kwargs)
-                        value_label.grid(row=data_row, column=col_idx*2, padx=2, pady=5, sticky=sticky)
-                        theme.update(value_label)
-                        # For highlighted rows, set text to black for readability (except URLs which stay blue)
-                        if is_current_waypoint:
-                            # Don't change foreground if it's a URL/link (blue color)
-                            try:
-                                current_fg = value_label.cget('foreground')
-                                if current_fg and current_fg.lower() not in ['blue', '#0000ff', '#0000ff']:
-                                    value_label.config(foreground="black")
-                            except:
-                                value_label.config(foreground="black")
-                    
-                    # Add separator after each column (except the last)
-                    if col_idx < len(headers) - 1:
-                        separator = ttk.Separator(table_frame, orient=tk.VERTICAL)
-                        separator.grid(row=data_row, column=col_idx*2+1, padx=0, pady=2, sticky=tk.NS)
-                        theme.update(separator)
-                    
-                    col_idx += 1
-            
-            # Apply theme recursively to entire table_frame after all widgets are created
-            # This ensures any widgets we missed get themed properly
-            # theme.update() will automatically apply correct foreground colors based on current theme
-            theme.update(table_frame)
-            
-            # For highlighted rows, override theme colors with black text for readability (except URLs which stay blue)
-            # This must be done AFTER theme.update() to override theme colors
-            def set_highlighted_text_black():
-                """Set text to black for all labels in highlighted rows, preserving blue URLs."""
-                # Find the highlighted row by looking for labels with yellow background
-                for widget in table_frame.winfo_children():
-                    try:
-                        if isinstance(widget, tk.Label):
-                            widget_bg = widget.cget('bg')
-                            # Check if this label has the yellow highlight background
-                            if widget_bg and widget_bg.lower() in ['#fff9c4', '#fff9c4']:
-                                # This is a highlighted row - set text to black unless it's a URL
-                                current_fg = widget.cget('foreground')
-                                current_cursor = widget.cget('cursor')
-                                # Keep blue links as blue, set everything else to black
-                                if current_fg and current_fg.lower() in ['blue', '#0000ff', '#0000ff']:
-                                    pass  # Keep blue URLs
-                                elif current_cursor == 'hand2':
-                                    pass  # Keep links (hand2 cursor indicates clickable)
-                                else:
-                                    widget.config(foreground="black")
-                        elif isinstance(widget, tk.Button):
-                            # Check buttons too - but only their text/foreground
-                            widget_bg = widget.cget('bg')
-                            if widget_bg and widget_bg.lower() in ['#fff9c4', '#fff9c4']:
-                                current_fg = widget.cget('foreground')
-                                if current_fg and current_fg.lower() not in ['blue', '#0000ff', '#0000ff']:
-                                    widget.config(foreground="black")
-                    except:
-                        pass
-            
-            # Apply black text to highlighted rows AFTER theme.update()
-            set_highlighted_text_black()
-            
-            # Style ttk.Separator widgets - they need special handling via ttk.Style
-            # Separators don't automatically get themed, so we style them to match theme foreground color
-            try:
-                separator_style = ttk.Style()
-                # Get theme foreground color from a label to match separator color
-                sample_label = tk.Label(table_frame)
-                theme.update(sample_label)
-                try:
-                    theme_fg = sample_label.cget('foreground')
-                    if theme_fg:
-                        # Configure separator background to match theme foreground color
-                        separator_style.configure('TSeparator', background=theme_fg)
-                except:
-                    pass
-                sample_label.destroy()
-            except:
-                pass
-            
-            # Finalize window setup after all widgets are created
-            canvas.update_idletasks()
-            canvas.configure(scrollregion=canvas.bbox("all"))
-            
-            # Calculate actual content width after widgets are created
-            scrollable_frame.update_idletasks()
-            actual_content_width = scrollable_frame.winfo_reqwidth()
-            # Use the larger of calculated width or actual content width
-            final_width = max(window_width, actual_content_width + 50)  # Add padding
-            # Still respect screen bounds
-            screen_width = route_window.winfo_screenwidth()
-            final_width = min(final_width, screen_width - 20)
-            final_width = max(final_width, 800)  # Minimum 800px
-            
-            # Set window size
-            route_window.geometry(f"{final_width}x700")
-            route_window.minsize(800, 400)  # Minimum size to show content
-            
-            # Close button (outside scrollable area)
-            close_btn_frame = tk.Frame(route_window)
-            close_btn_frame.pack(pady=5)
-            theme.update(close_btn_frame)
-            close_btn = tk.Button(close_btn_frame, text="Close", command=on_window_close)
-            close_btn.pack()
-            theme.update(close_btn)
-            
-            # Apply theme to main frame (theme.update doesn't accept Toplevel directly)
-            # theme.update() will recursively apply to all child widgets
-            theme.update(main_frame)
-            
-        except Exception:
-            logger.warning('!! Error showing route window: ' + traceback.format_exc(), exc_info=False)
-            confirmDialog.showerror("Error", "Failed to display route.")
+            show_route_window(self)
+        except Exception as e:
+            logger.error(f"[GalaxyGPS.show_route_window] EXCEPTION: {type(e).__name__}: {e}")
+            import traceback
+            logger.error(f"[GalaxyGPS.show_route_window] TRACEBACK:\n{traceback.format_exc()}")
     
     def refresh_route_window_if_open(self):
         """
         Refresh the route window if it's currently open.
         This is called when the next waypoint changes to update the highlight.
+        Uses the seamless refresh from windows.py that preserves scroll position.
         """
-        if self.route_window_ref:
-            try:
-                # Check if window still exists
-                self.route_window_ref.winfo_exists()
-                # Reopen the window to refresh highlights
-                self.show_route_window()
-            except:
-                # Window was closed, clear reference
-                self.route_window_ref = None
-    
-    def update_fleet_carrier_status(self):
-        """
-        Update the fleet carrier status display (legacy method, now uses dropdown).
-        """
-        self.update_fleet_carrier_dropdown()
-        self.update_fleet_carrier_system_display()
-        self.update_fleet_carrier_rings_status()
-        self.update_fleet_carrier_tritium_display()
-        self.update_fleet_carrier_balance_display()
+        refresh_route_window_if_open(self)

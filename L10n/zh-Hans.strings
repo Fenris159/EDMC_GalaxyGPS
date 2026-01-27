@@ -1,0 +1,285 @@
+/* GalaxyGPS Plugin Chinese Simplified Translation */
+
+/* load.py: Update notification dialog */
+"New GalaxyGPS update available!" = "新的GalaxyGPS更新可用！";
+
+/* load.py: Update installation instructions */
+"If you choose to install it, you will have to restart EDMC for it to take effect." = "如果您选择安装，则需要重新启动EDMC才能生效。";
+
+/* load.py: Prompt to install update */
+"Install?" = "安装？";
+
+/* load.py: Confirmation message after accepting update */
+"The update will be installed as soon as you quit EDMC." = "更新将在您退出EDMC后立即安装。";
+
+/* load.py: Error dialog title */
+"GalaxyGPS Error" = "GalaxyGPS错误";
+
+/* load.py: Error message when plugin fails to initialize */
+"Failed to initialize plugin:{CR}{ERROR}{CR}{CR}Check EDMC log for details." = "插件初始化失败:{CR}{ERROR}{CR}{CR}请查看EDMC日志了解详情。";
+
+/* GalaxyGPS.py: Button to view all fleet carriers */
+"View All" = "查看全部";
+
+/* GalaxyGPS.py: Button to open Inara website */
+"Inara" = "Inara";
+
+/* GalaxyGPS.py: Button to find tritium on Inara */
+"Find Trit" = "查找氚";
+
+/* GalaxyGPS.py: Button to import route from CSV file */
+"Import file" = "导入文件";
+
+/* GalaxyGPS.py: Button to view current route */
+"View Route" = "查看路线";
+
+/* GalaxyGPS.py: Button to show route plotting GUI */
+"Plot route" = "规划路线";
+
+/* GalaxyGPS.py: Button to calculate/compute route */
+"Calculate" = "计算";
+
+/* GalaxyGPS.py: Button to cancel route plotting */
+"Cancel" = "取消";
+
+/* GalaxyGPS.py: Button to clear current route */
+"Clear route" = "清除路线";
+
+/* GalaxyGPS.py: Button text during route calculation */
+"Computing..." = "计算中...";
+
+/* GalaxyGPS.py: Label for fleet carrier selector */
+"Fleet Carrier:" = "舰队航母:";
+
+/* GalaxyGPS.py: Label for fleet carrier system display */
+"System:" = "系统:";
+
+/* GalaxyGPS.py: Label for icy rings status */
+"Icy Rings" = "冰环";
+
+/* GalaxyGPS.py: Label for pristine ring status */
+"Pristine" = "原始";
+
+/* GalaxyGPS.py: Label for fleet carrier balance */
+"Balance:" = "余额:";
+
+/* GalaxyGPS.py: Label for neutron star supercharge toggle */
+"Supercharge" = "超级充能";
+
+/* GalaxyGPS.py: Placeholder text for source system input */
+"Source System" = "起始系统";
+
+/* GalaxyGPS.py: Placeholder text for destination system input */
+"Destination System" = "目标系统";
+
+/* GalaxyGPS.py: Placeholder text for jump range input */
+"Range (LY)" = "范围（光年）";
+
+/* GalaxyGPS.py: Label for efficiency slider */
+"Efficiency (%)" = "效率（%）";
+
+/* GalaxyGPS.py: Confirmation dialog for clearing route */
+"Are you sure you want to clear the current route?" = "您确定要清除当前路线吗？";
+
+/* GalaxyGPS.py: Warning when no fleet carrier selected */
+"No Carrier Selected" = "未选择航母";
+
+/* GalaxyGPS.py: Message when no fleet carrier selected */
+"Please select a fleet carrier first." = "请先选择舰队航母。";
+
+/* GalaxyGPS.py: Error dialog title */
+"Error" = "错误";
+
+/* GalaxyGPS.py: Error opening Inara website */
+"Failed to open Inara page." = "无法打开Inara页面。";
+
+/* GalaxyGPS.py: Warning when carrier system unknown */
+"No System" = "无系统";
+
+/* GalaxyGPS.py: Message when carrier system unknown */
+"Could not determine carrier's current system." = "无法确定航母的当前系统。";
+
+/* GalaxyGPS.py: Error opening Inara tritium search */
+"Failed to open Inara Tritium search." = "无法打开Inara氚搜索。";
+
+/* GalaxyGPS.py: Warning when no carrier data available */
+"No Carrier Data" = "无航母数据";
+
+/* GalaxyGPS.py: Message when no carrier data available */
+"No fleet carrier data available." = "无可用舰队航母数据。";
+
+/* GalaxyGPS.py: Warning when carrier system location unknown */
+"Could not determine carrier's current system location." = "无法确定航母的当前系统位置。";
+
+/* GalaxyGPS.py: Warning when no carrier selected */
+"No Carrier" = "无航母";
+
+/* GalaxyGPS.py: Message when no carrier selected */
+"No fleet carrier selected." = "未选择舰队航母。";
+
+/* windows.py: Window title for fleet carrier list */
+"Fleet Carriers" = "舰队航母";
+
+/* windows.py: Info message when no route is loaded */
+"No route is currently loaded." = "当前未加载路线。";
+
+/* windows.py: Warning dialog title for missing route file */
+"Route File Not Found" = "未找到路线文件";
+
+/* windows.py: Warning message about missing route file */
+"Route CSV file not found. Please import the route again." = "未找到路线CSV文件。请重新导入路线。";
+
+/* windows.py: Info when no route data to display */
+"No route data to display." = "无路线数据可显示。";
+
+/* windows.py: Error reading route CSV file */
+"Failed to read route CSV file." = "无法读取路线CSV文件。";
+
+/* windows.py: Error displaying carrier details */
+"Failed to display carrier details." = "无法显示航母详情。";
+
+/* windows.py: Error displaying route */
+"Failed to display route." = "无法显示路线。";
+
+/* windows.py: Error opening cargo details */
+"Failed to open cargo details: {ERROR}" = "无法打开货物详情: {ERROR}";
+
+/* windows.py: Error opening ships details */
+"Failed to open ships details: {ERROR}" = "无法打开舰船详情: {ERROR}";
+
+/* GalaxyGPS.py: Label prefix for next waypoint in route */
+"Next waypoint: " = "下一个航点: ";
+
+/* GalaxyGPS.py: Label for estimated jumps remaining */
+"Estimated jumps left: " = "预计剩余跳跃: ";
+
+/* GalaxyGPS.py: Label for bodies to scan at current system */
+"Bodies to scan at: " = "需要扫描的天体: ";
+
+/* GalaxyGPS.py: Warning label when tritium restock needed */
+"Warning: Restock Tritium" = "警告：补充氚";
+
+/* GalaxyGPS.py: Reminder label to refuel ship */
+"Time to scoop some fuel" = "该收集燃料了";
+
+/* GalaxyGPS.py: Label for next waypoint jumps count */
+"Next waypoint jumps" = "到下一个航点的跳跃";
+
+/* windows.py: Window title for fleet carrier details */
+"Fleet Carrier Details" = "舰队航母详情";
+
+/* windows.py: Window title for route view */
+"Route View" = "路线视图";
+
+/* GalaxyGPS.py: Message shown at start of route */
+"Start of the journey" = "旅程开始";
+
+/* GalaxyGPS.py: Label for remaining jumps after current waypoint */
+"Remaining jumps afterwards" = "之后的剩余跳跃";
+
+/* GalaxyGPS.py: Message shown when route is completed */
+"Finished" = "完成";
+
+/* GalaxyGPS.py: Label for next jump distance in LY */
+"Next jump LY" = "下一次跳跃 光年";
+
+/* GalaxyGPS.py: Label for distance remaining to destination */
+"Distance Remaining" = "剩余距离";
+
+/* Fleet Carrier window headers */
+"Select" = "选择";
+"Callsign" = "呼号";
+"Name" = "名称";
+"EDSM" = "EDSM";
+"System" = "系统";
+"Tritium" = "氚";
+"Balance" = "余额";
+"Cargo" = "货物";
+"Shipyard" = "造船厂";
+"State" = "状态";
+"Theme" = "主题";
+"Docking Access" = "停靠权限";
+"Notorious Access" = "恶名权限";
+"Last Updated" = "最后更新";
+
+/* Route View window headers - Common */
+"System Name" = "系统名称";
+"Distance" = "距离";
+"Distance To Arrival" = "到达距离";
+"Jumps" = "跳跃";
+"Fuel Left" = "剩余燃料";
+"Fuel Used" = "已用燃料";
+"Refuel" = "补充燃料";
+"Neutron Star" = "中子星";
+
+/* Route View window headers - Fleet Carrier */
+"Tritium in tank" = "储罐中的氚";
+"Tritium in market" = "市场中的氚";
+"Icy Ring" = "冰环";
+"Pristine" = "原始";
+"Restock Tritium" = "补充氚";
+
+/* Route View window headers - Road to Riches */
+"Body Name" = "天体名称";
+"Body Subtype" = "天体子类型";
+"Is Terraformable" = "可地球化";
+"Estimated Scan Value" = "估计扫描价值";
+"Estimated Mapping Value" = "估计制图价值";
+
+/* GalaxyGPS.py: Label for fuel used in route */
+"Fuel Used" = "已用燃料";
+
+/* GalaxyGPS.py: Label for fuel remaining in route */
+"Fuel Remaining" = "剩余燃料";
+
+/* GalaxyGPS.py: Label for number of jumps to waypoint */
+"Number of Jumps" = "跳跃次数";
+
+/* GalaxyGPS.py: Urgent warning to restock tritium */
+"Restock Tritium Now" = "立即补充氚";
+
+/* GalaxyGPS.py: Warning when destination system is missing in route planner */
+"Please provide a destination system." = "请提供目标系统。";
+
+/* GalaxyGPS.py: Error message when route plotting fails */
+"Error while trying to plot a route, please try again." = "规划路线时出错，请重试。";
+
+/* message_dialog.py: Yes button in confirmation dialogs */
+"Yes" = "是";
+
+/* message_dialog.py: No button in confirmation dialogs */
+"No" = "否";
+
+/* message_dialog.py: OK button in dialogs */
+"OK" = "确定";
+
+/* message_dialog.py: Cancel button in dialogs - already defined in GalaxyGPS.py but also used here */
+/* "Cancel" = "取消"; */
+
+/* windows.py: Cargo Details window title */
+"Cargo Details" = "货物详情";
+
+/* windows.py: Message when cargo manager not available */
+"Cargo manager not available." = "货物管理器不可用。";
+
+/* windows.py: Message when no cargo data available for carrier */
+"No cargo data available for" = "无可用货物数据";
+
+/* windows.py: Cargo window column headers */
+"Cargo" = "货物";
+"Quantity" = "数量";
+"Value" = "价值";
+
+/* windows.py: Ships Details window title */
+"Ships Details" = "舰船详情";
+
+/* windows.py: Message when ships manager not available */
+"Ships manager not available." = "舰船管理器不可用。";
+
+/* windows.py: Message when no ships data available for carrier */
+"No ships data available for" = "无可用舰船数据";
+
+/* windows.py: Ships window column headers */
+"Ship" = "舰船";
+"Ship Name" = "舰船名称";
+/* "Last Updated" = "最后更新"; */ /* Already defined in Fleet Carrier headers */

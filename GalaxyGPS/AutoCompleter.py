@@ -6,10 +6,10 @@ import threading
 import traceback
 from tkinter import *
 
-import requests  # type: ignore
 from .PlaceHolder import PlaceHolder
-
-from config import appname  # type: ignore
+from .ui_helpers import style_listbox_for_theme
+from config import appname, user_agent  # type: ignore
+import timeout_session  # type: ignore
 
 # We need a name of plugin dir, not AutoCompleter.py dir
 plugin_name = os.path.basename(os.path.dirname(os.path.dirname(__file__)))
@@ -144,6 +144,8 @@ class AutoCompleter(PlaceHolder):
             if info:
                 self.lb.grid(row=int(info["row"]) + 1, columnspan=2)
                 self.lb_up = True
+                # Apply theme styling to the listbox when it's shown
+                style_listbox_for_theme(self.lb, self.parent)
 
     def hide_list(self):
         if self.lb_up:
@@ -155,11 +157,9 @@ class AutoCompleter(PlaceHolder):
         if inp != self.placeholder and len(inp) >= 3:
             url = "https://spansh.co.uk/api/systems?"
             try:
-                results = requests.get(url,
-                                       params={'q': inp},
-                                       headers={'User-Agent': "EDMC_GalaxyGPS 1.0"},
-                                       timeout=3)
-
+                session = timeout_session.new_session()
+                session.headers['User-Agent'] = user_agent + ' GalaxyGPS'
+                results = session.get(url, params={'q': inp}, timeout=3)
                 lista = json.loads(results.content)
                 if lista:
                     self.write(lista)

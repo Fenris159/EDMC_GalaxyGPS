@@ -1,0 +1,285 @@
+/* GalaxyGPS Plugin Latvian Translation */
+
+/* load.py: Update notification dialog */
+"New GalaxyGPS update available!" = "Pieejama jauna GalaxyGPS atjauninājuma versija!";
+
+/* load.py: Update installation instructions */
+"If you choose to install it, you will have to restart EDMC for it to take effect." = "Ja izvēlaties to instalēt, jums būs jāpārstartē EDMC, lai tas stātos spēkā.";
+
+/* load.py: Prompt to install update */
+"Install?" = "Instalēt?";
+
+/* load.py: Confirmation message after accepting update */
+"The update will be installed as soon as you quit EDMC." = "Atjauninājums tiks instalēts, tiklīdz aizvērsiet EDMC.";
+
+/* load.py: Error dialog title */
+"GalaxyGPS Error" = "GalaxyGPS kļūda";
+
+/* load.py: Error message when plugin fails to initialize */
+"Failed to initialize plugin:{CR}{ERROR}{CR}{CR}Check EDMC log for details." = "Neizdevās inicializēt spraudni:{CR}{ERROR}{CR}{CR}Detalizētai informācijai skatiet EDMC žurnālu.";
+
+/* GalaxyGPS.py: Button to view all fleet carriers */
+"View All" = "Skatīt visu";
+
+/* GalaxyGPS.py: Button to open Inara website */
+"Inara" = "Inara";
+
+/* GalaxyGPS.py: Button to find tritium on Inara */
+"Find Trit" = "Meklēt tritiju";
+
+/* GalaxyGPS.py: Button to import route from CSV file */
+"Import file" = "Importēt failu";
+
+/* GalaxyGPS.py: Button to view current route */
+"View Route" = "Skatīt maršrutu";
+
+/* GalaxyGPS.py: Button to show route plotting GUI */
+"Plot route" = "Plānot maršrutu";
+
+/* GalaxyGPS.py: Button to calculate/compute route */
+"Calculate" = "Aprēķināt";
+
+/* GalaxyGPS.py: Button to cancel route plotting */
+"Cancel" = "Atcelt";
+
+/* GalaxyGPS.py: Button to clear current route */
+"Clear route" = "Notīrīt maršrutu";
+
+/* GalaxyGPS.py: Button text during route calculation */
+"Computing..." = "Aprēķina...";
+
+/* GalaxyGPS.py: Label for fleet carrier selector */
+"Fleet Carrier:" = "Flotes nesējs:";
+
+/* GalaxyGPS.py: Label for fleet carrier system display */
+"System:" = "Sistēma:";
+
+/* GalaxyGPS.py: Label for icy rings status */
+"Icy Rings" = "Ledus gredzeni";
+
+/* GalaxyGPS.py: Label for pristine ring status */
+"Pristine" = "Neskarts";
+
+/* GalaxyGPS.py: Label for fleet carrier balance */
+"Balance:" = "Atlikums:";
+
+/* GalaxyGPS.py: Label for neutron star supercharge toggle */
+"Supercharge" = "Uzlāde";
+
+/* GalaxyGPS.py: Placeholder text for source system input */
+"Source System" = "Avota sistēma";
+
+/* GalaxyGPS.py: Placeholder text for destination system input */
+"Destination System" = "Mērķa sistēma";
+
+/* GalaxyGPS.py: Placeholder text for jump range input */
+"Range (LY)" = "Darbības rādiuss (LY)";
+
+/* GalaxyGPS.py: Label for efficiency slider */
+"Efficiency (%)" = "Efektivitāte (%)";
+
+/* GalaxyGPS.py: Confirmation dialog for clearing route */
+"Are you sure you want to clear the current route?" = "Vai tiešām vēlaties notīrīt pašreizējo maršrutu?";
+
+/* GalaxyGPS.py: Warning when no fleet carrier selected */
+"No Carrier Selected" = "Nesējs nav izvēlēts";
+
+/* GalaxyGPS.py: Message when no fleet carrier selected */
+"Please select a fleet carrier first." = "Lūdzu, vispirms izvēlieties flotes nesēju.";
+
+/* GalaxyGPS.py: Error dialog title */
+"Error" = "Kļūda";
+
+/* GalaxyGPS.py: Error opening Inara website */
+"Failed to open Inara page." = "Neizdevās atvērt Inara lapu.";
+
+/* GalaxyGPS.py: Warning when carrier system unknown */
+"No System" = "Nav sistēmas";
+
+/* GalaxyGPS.py: Message when carrier system unknown */
+"Could not determine carrier's current system." = "Nevarēja noteikt nesēja pašreizējo sistēmu.";
+
+/* GalaxyGPS.py: Error opening Inara tritium search */
+"Failed to open Inara Tritium search." = "Neizdevās atvērt Inara tritija meklēšanu.";
+
+/* GalaxyGPS.py: Warning when no carrier data available */
+"No Carrier Data" = "Nav nesēja datu";
+
+/* GalaxyGPS.py: Message when no carrier data available */
+"No fleet carrier data available." = "Nav pieejami flotes nesēja dati.";
+
+/* GalaxyGPS.py: Warning when carrier system location unknown */
+"Could not determine carrier's current system location." = "Nevarēja noteikt nesēja pašreizējās sistēmas atrašanās vietu.";
+
+/* GalaxyGPS.py: Warning when no carrier selected */
+"No Carrier" = "Nav nesēja";
+
+/* GalaxyGPS.py: Message when no carrier selected */
+"No fleet carrier selected." = "Nav izvēlēts flotes nesējs.";
+
+/* windows.py: Window title for fleet carrier list */
+"Fleet Carriers" = "Flotes nesēji";
+
+/* windows.py: Info message when no route is loaded */
+"No route is currently loaded." = "Pašlaik nav ielādēts neviens maršruts.";
+
+/* windows.py: Warning dialog title for missing route file */
+"Route File Not Found" = "Maršruta fails nav atrasts";
+
+/* windows.py: Warning message about missing route file */
+"Route CSV file not found. Please import the route again." = "Maršruta CSV fails nav atrasts. Lūdzu, importējiet maršrutu vēlreiz.";
+
+/* windows.py: Info when no route data to display */
+"No route data to display." = "Nav maršruta datu, ko attēlot.";
+
+/* windows.py: Error reading route CSV file */
+"Failed to read route CSV file." = "Neizdevās nolasīt maršruta CSV failu.";
+
+/* windows.py: Error displaying carrier details */
+"Failed to display carrier details." = "Neizdevās attēlot nesēja detaļas.";
+
+/* windows.py: Error displaying route */
+"Failed to display route." = "Neizdevās attēlot maršrutu.";
+
+/* windows.py: Error opening cargo details */
+"Failed to open cargo details: {ERROR}" = "Neizdevās atvērt kravas detaļas: {ERROR}";
+
+/* windows.py: Error opening ships details */
+"Failed to open ships details: {ERROR}" = "Neizdevās atvērt kuģu detaļas: {ERROR}";
+
+/* GalaxyGPS.py: Label prefix for next waypoint in route */
+"Next waypoint: " = "Nākamais waypoint: ";
+
+/* GalaxyGPS.py: Label for estimated jumps remaining */
+"Estimated jumps left: " = "Paredzams atlikušo lēcienu: ";
+
+/* GalaxyGPS.py: Label for bodies to scan at current system */
+"Bodies to scan at: " = "Skenējamie objekti: ";
+
+/* GalaxyGPS.py: Warning label when tritium restock needed */
+"Warning: Restock Tritium" = "Brīdinājums: Papildināt tritiju";
+
+/* GalaxyGPS.py: Reminder label to refuel ship */
+"Time to scoop some fuel" = "Laiks savākt degvielu";
+
+/* GalaxyGPS.py: Label for next waypoint jumps count */
+"Next waypoint jumps" = "Lēcieni uz nākamo waypoint";
+
+/* windows.py: Window title for fleet carrier details */
+"Fleet Carrier Details" = "Flotes nesēja detaļas";
+
+/* windows.py: Window title for route view */
+"Route View" = "Maršruta skats";
+
+/* GalaxyGPS.py: Message shown at start of route */
+"Start of the journey" = "Ceļojuma sākums";
+
+/* GalaxyGPS.py: Label for remaining jumps after current waypoint */
+"Remaining jumps afterwards" = "Atlikušie lēcieni pēc tam";
+
+/* GalaxyGPS.py: Message shown when route is completed */
+"Finished" = "Pabeigts";
+
+/* GalaxyGPS.py: Label for next jump distance in LY */
+"Next jump LY" = "Nākamais lēciens LY";
+
+/* GalaxyGPS.py: Label for distance remaining to destination */
+"Distance Remaining" = "Atlikusī distance";
+
+/* Fleet Carrier window headers */
+"Select" = "Izvēlēties";
+"Callsign" = "Izsaukuma zīme";
+"Name" = "Vārds";
+"EDSM" = "EDSM";
+"System" = "Sistēma";
+"Tritium" = "Tritijs";
+"Balance" = "Atlikums";
+"Cargo" = "Krava";
+"Shipyard" = "Kuģu būvētava";
+"State" = "Stāvoklis";
+"Theme" = "Tēma";
+"Docking Access" = "Piestiprināšanas piekļuve";
+"Notorious Access" = "Slavenā piekļuve";
+"Last Updated" = "Pēdējoreiz atjaunināts";
+
+/* Route View window headers - Common */
+"System Name" = "Sistēmas nosaukums";
+"Distance" = "Distance";
+"Distance To Arrival" = "Distance līdz ierašanai";
+"Jumps" = "Lēcieni";
+"Fuel Left" = "Atlikusī degviela";
+"Fuel Used" = "Izlietotā degviela";
+"Refuel" = "Uzpildīt";
+"Neutron Star" = "Neitronu zvaigzne";
+
+/* Route View window headers - Fleet Carrier */
+"Tritium in tank" = "Tritijs tvertnē";
+"Tritium in market" = "Tritijs tirgū";
+"Icy Ring" = "Ledus gredzens";
+"Pristine" = "Neskarts";
+"Restock Tritium" = "Papildināt tritiju";
+
+/* Route View window headers - Road to Riches */
+"Body Name" = "Objekta nosaukums";
+"Body Subtype" = "Objekta apakštips";
+"Is Terraformable" = "Ir terraformējams";
+"Estimated Scan Value" = "Paredzamā skenēšanas vērtība";
+"Estimated Mapping Value" = "Paredzamā kartēšanas vērtība";
+
+/* GalaxyGPS.py: Label for fuel used in route */
+"Fuel Used" = "Izlietotā degviela";
+
+/* GalaxyGPS.py: Label for fuel remaining in route */
+"Fuel Remaining" = "Atlikusī degviela";
+
+/* GalaxyGPS.py: Label for number of jumps to waypoint */
+"Number of Jumps" = "Lēcienu skaits";
+
+/* GalaxyGPS.py: Urgent warning to restock tritium */
+"Restock Tritium Now" = "Papildināt tritiju tagad";
+
+/* GalaxyGPS.py: Warning when destination system is missing in route planner */
+"Please provide a destination system." = "Lūdzu, norādiet mērķa sistēmu.";
+
+/* GalaxyGPS.py: Error message when route plotting fails */
+"Error while trying to plot a route, please try again." = "Kļūda, mēģinot plānot maršrutu, lūdzu, mēģiniet vēlreiz.";
+
+/* message_dialog.py: Yes button in confirmation dialogs */
+"Yes" = "Jā";
+
+/* message_dialog.py: No button in confirmation dialogs */
+"No" = "Nē";
+
+/* message_dialog.py: OK button in dialogs */
+"OK" = "Labi";
+
+/* message_dialog.py: Cancel button in dialogs - already defined in GalaxyGPS.py but also used here */
+/* "Cancel" = "Atcelt"; */
+
+/* windows.py: Cargo Details window title */
+"Cargo Details" = "Kravas detaļas";
+
+/* windows.py: Message when cargo manager not available */
+"Cargo manager not available." = "Kravas pārvaldnieks nav pieejams.";
+
+/* windows.py: Message when no cargo data available for carrier */
+"No cargo data available for" = "Nav pieejami kravas dati";
+
+/* windows.py: Cargo window column headers */
+"Cargo" = "Krava";
+"Quantity" = "Daudzums";
+"Value" = "Vērtība";
+
+/* windows.py: Ships Details window title */
+"Ships Details" = "Kuģu detaļas";
+
+/* windows.py: Message when ships manager not available */
+"Ships manager not available." = "Kuģu pārvaldnieks nav pieejams.";
+
+/* windows.py: Message when no ships data available for carrier */
+"No ships data available for" = "Nav pieejami kuģu dati";
+
+/* windows.py: Ships window column headers */
+"Ship" = "Kuģis";
+"Ship Name" = "Kuģa nosaukums";
+/* "Last Updated" = "Pēdējoreiz atjaunināts"; */ /* Already defined in Fleet Carrier headers */

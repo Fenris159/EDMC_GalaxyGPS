@@ -1,0 +1,285 @@
+/* GalaxyGPS Plugin Russian Translation */
+
+/* load.py: Update notification dialog */
+"New GalaxyGPS update available!" = "Доступно новое обновление GalaxyGPS!";
+
+/* load.py: Update installation instructions */
+"If you choose to install it, you will have to restart EDMC for it to take effect." = "Если вы решите установить его, вам придется перезапустить EDMC, чтобы оно вступило в силу.";
+
+/* load.py: Prompt to install update */
+"Install?" = "Установить?";
+
+/* load.py: Confirmation message after accepting update */
+"The update will be installed as soon as you quit EDMC." = "Обновление будет установлено, как только вы закроете EDMC.";
+
+/* load.py: Error dialog title */
+"GalaxyGPS Error" = "Ошибка GalaxyGPS";
+
+/* load.py: Error message when plugin fails to initialize */
+"Failed to initialize plugin:{CR}{ERROR}{CR}{CR}Check EDMC log for details." = "Не удалось инициализировать плагин:{CR}{ERROR}{CR}{CR}Проверьте журнал EDMC для получения подробностей.";
+
+/* GalaxyGPS.py: Button to view all fleet carriers */
+"View All" = "Показать все";
+
+/* GalaxyGPS.py: Button to open Inara website */
+"Inara" = "Inara";
+
+/* GalaxyGPS.py: Button to find tritium on Inara */
+"Find Trit" = "Найти тритий";
+
+/* GalaxyGPS.py: Button to import route from CSV file */
+"Import file" = "Импортировать файл";
+
+/* GalaxyGPS.py: Button to view current route */
+"View Route" = "Показать маршрут";
+
+/* GalaxyGPS.py: Button to show route plotting GUI */
+"Plot route" = "Построить маршрут";
+
+/* GalaxyGPS.py: Button to calculate/compute route */
+"Calculate" = "Вычислить";
+
+/* GalaxyGPS.py: Button to cancel route plotting */
+"Cancel" = "Отмена";
+
+/* GalaxyGPS.py: Button to clear current route */
+"Clear route" = "Очистить маршрут";
+
+/* GalaxyGPS.py: Button text during route calculation */
+"Computing..." = "Вычисление...";
+
+/* GalaxyGPS.py: Label for fleet carrier selector */
+"Fleet Carrier:" = "Авианосец флота:";
+
+/* GalaxyGPS.py: Label for fleet carrier system display */
+"System:" = "Система:";
+
+/* GalaxyGPS.py: Label for icy rings status */
+"Icy Rings" = "Ледяные кольца";
+
+/* GalaxyGPS.py: Label for pristine ring status */
+"Pristine" = "Нетронутые";
+
+/* GalaxyGPS.py: Label for fleet carrier balance */
+"Balance:" = "Баланс:";
+
+/* GalaxyGPS.py: Label for neutron star supercharge toggle */
+"Supercharge" = "Суперзарядка";
+
+/* GalaxyGPS.py: Placeholder text for source system input */
+"Source System" = "Система отправления";
+
+/* GalaxyGPS.py: Placeholder text for destination system input */
+"Destination System" = "Система назначения";
+
+/* GalaxyGPS.py: Placeholder text for jump range input */
+"Range (LY)" = "Дальность (СГ)";
+
+/* GalaxyGPS.py: Label for efficiency slider */
+"Efficiency (%)" = "Эффективность (%)";
+
+/* GalaxyGPS.py: Confirmation dialog for clearing route */
+"Are you sure you want to clear the current route?" = "Вы уверены, что хотите очистить текущий маршрут?";
+
+/* GalaxyGPS.py: Warning when no fleet carrier selected */
+"No Carrier Selected" = "Авианосец не выбран";
+
+/* GalaxyGPS.py: Message when no fleet carrier selected */
+"Please select a fleet carrier first." = "Пожалуйста, сначала выберите авианосец флота.";
+
+/* GalaxyGPS.py: Error dialog title */
+"Error" = "Ошибка";
+
+/* GalaxyGPS.py: Error opening Inara website */
+"Failed to open Inara page." = "Не удалось открыть страницу Inara.";
+
+/* GalaxyGPS.py: Warning when carrier system unknown */
+"No System" = "Нет системы";
+
+/* GalaxyGPS.py: Message when carrier system unknown */
+"Could not determine carrier's current system." = "Не удалось определить текущую систему авианосца.";
+
+/* GalaxyGPS.py: Error opening Inara tritium search */
+"Failed to open Inara Tritium search." = "Не удалось открыть поиск трития в Inara.";
+
+/* GalaxyGPS.py: Warning when no carrier data available */
+"No Carrier Data" = "Нет данных авианосца";
+
+/* GalaxyGPS.py: Message when no carrier data available */
+"No fleet carrier data available." = "Нет доступных данных авианосца флота.";
+
+/* GalaxyGPS.py: Warning when carrier system location unknown */
+"Could not determine carrier's current system location." = "Не удалось определить местоположение текущей системы авианосца.";
+
+/* GalaxyGPS.py: Warning when no carrier selected */
+"No Carrier" = "Нет авианосца";
+
+/* GalaxyGPS.py: Message when no carrier selected */
+"No fleet carrier selected." = "Авианосец флота не выбран.";
+
+/* windows.py: Window title for fleet carrier list */
+"Fleet Carriers" = "Авианосцы флота";
+
+/* windows.py: Info message when no route is loaded */
+"No route is currently loaded." = "В настоящее время маршрут не загружен.";
+
+/* windows.py: Warning dialog title for missing route file */
+"Route File Not Found" = "Файл маршрута не найден";
+
+/* windows.py: Warning message about missing route file */
+"Route CSV file not found. Please import the route again." = "CSV файл маршрута не найден. Пожалуйста, импортируйте маршрут снова.";
+
+/* windows.py: Info when no route data to display */
+"No route data to display." = "Нет данных маршрута для отображения.";
+
+/* windows.py: Error reading route CSV file */
+"Failed to read route CSV file." = "Не удалось прочитать CSV файл маршрута.";
+
+/* windows.py: Error displaying carrier details */
+"Failed to display carrier details." = "Не удалось отобразить детали авианосца.";
+
+/* windows.py: Error displaying route */
+"Failed to display route." = "Не удалось отобразить маршрут.";
+
+/* windows.py: Error opening cargo details */
+"Failed to open cargo details: {ERROR}" = "Не удалось открыть детали груза: {ERROR}";
+
+/* windows.py: Error opening ships details */
+"Failed to open ships details: {ERROR}" = "Не удалось открыть детали кораблей: {ERROR}";
+
+/* GalaxyGPS.py: Label prefix for next waypoint in route */
+"Next waypoint: " = "Следующая точка: ";
+
+/* GalaxyGPS.py: Label for estimated jumps remaining */
+"Estimated jumps left: " = "Осталось прыжков: ";
+
+/* GalaxyGPS.py: Label for bodies to scan at current system */
+"Bodies to scan at: " = "Тела для сканирования в: ";
+
+/* GalaxyGPS.py: Warning label when tritium restock needed */
+"Warning: Restock Tritium" = "Предупреждение: Пополнить тритий";
+
+/* GalaxyGPS.py: Reminder label to refuel ship */
+"Time to scoop some fuel" = "Время собрать топливо";
+
+/* GalaxyGPS.py: Label for next waypoint jumps count */
+"Next waypoint jumps" = "Прыжки до следующей точки";
+
+/* windows.py: Window title for fleet carrier details */
+"Fleet Carrier Details" = "Детали авианосца флота";
+
+/* windows.py: Window title for route view */
+"Route View" = "Просмотр маршрута";
+
+/* GalaxyGPS.py: Message shown at start of route */
+"Start of the journey" = "Начало путешествия";
+
+/* GalaxyGPS.py: Label for remaining jumps after current waypoint */
+"Remaining jumps afterwards" = "Оставшиеся прыжки после";
+
+/* GalaxyGPS.py: Message shown when route is completed */
+"Finished" = "Завершено";
+
+/* GalaxyGPS.py: Label for next jump distance in LY */
+"Next jump LY" = "Следующий прыжок СГ";
+
+/* GalaxyGPS.py: Label for distance remaining to destination */
+"Distance Remaining" = "Оставшееся расстояние";
+
+/* Fleet Carrier window headers */
+"Select" = "Выбрать";
+"Callsign" = "Позывной";
+"Name" = "Имя";
+"EDSM" = "EDSM";
+"System" = "Система";
+"Tritium" = "Тритий";
+"Balance" = "Баланс";
+"Cargo" = "Груз";
+"Shipyard" = "Верфь";
+"State" = "Состояние";
+"Theme" = "Тема";
+"Docking Access" = "Доступ к стыковке";
+"Notorious Access" = "Доступ для печально известных";
+"Last Updated" = "Последнее обновление";
+
+/* Route View window headers - Common */
+"System Name" = "Название системы";
+"Distance" = "Расстояние";
+"Distance To Arrival" = "Расстояние до прибытия";
+"Jumps" = "Прыжки";
+"Fuel Left" = "Осталось топлива";
+"Fuel Used" = "Использовано топлива";
+"Refuel" = "Заправиться";
+"Neutron Star" = "Нейтронная звезда";
+
+/* Route View window headers - Fleet Carrier */
+"Tritium in tank" = "Тритий в баке";
+"Tritium in market" = "Тритий на рынке";
+"Icy Ring" = "Ледяное кольцо";
+"Pristine" = "Нетронутое";
+"Restock Tritium" = "Пополнить тритий";
+
+/* Route View window headers - Road to Riches */
+"Body Name" = "Название тела";
+"Body Subtype" = "Подтип тела";
+"Is Terraformable" = "Терраформируемое";
+"Estimated Scan Value" = "Оценочная стоимость сканирования";
+"Estimated Mapping Value" = "Оценочная стоимость картографирования";
+
+/* GalaxyGPS.py: Label for fuel used in route */
+"Fuel Used" = "Использовано топлива";
+
+/* GalaxyGPS.py: Label for fuel remaining in route */
+"Fuel Remaining" = "Осталось топлива";
+
+/* GalaxyGPS.py: Label for number of jumps to waypoint */
+"Number of Jumps" = "Количество прыжков";
+
+/* GalaxyGPS.py: Urgent warning to restock tritium */
+"Restock Tritium Now" = "Пополнить тритий сейчас";
+
+/* GalaxyGPS.py: Warning when destination system is missing in route planner */
+"Please provide a destination system." = "Пожалуйста, укажите систему назначения.";
+
+/* GalaxyGPS.py: Error message when route plotting fails */
+"Error while trying to plot a route, please try again." = "Ошибка при попытке построить маршрут, пожалуйста, попробуйте снова.";
+
+/* message_dialog.py: Yes button in confirmation dialogs */
+"Yes" = "Да";
+
+/* message_dialog.py: No button in confirmation dialogs */
+"No" = "Нет";
+
+/* message_dialog.py: OK button in dialogs */
+"OK" = "ОК";
+
+/* message_dialog.py: Cancel button in dialogs - already defined in GalaxyGPS.py but also used here */
+/* "Cancel" = "Отмена"; */
+
+/* windows.py: Cargo Details window title */
+"Cargo Details" = "Детали груза";
+
+/* windows.py: Message when cargo manager not available */
+"Cargo manager not available." = "Менеджер груза недоступен.";
+
+/* windows.py: Message when no cargo data available for carrier */
+"No cargo data available for" = "Нет данных груза для";
+
+/* windows.py: Cargo window column headers */
+"Cargo" = "Груз";
+"Quantity" = "Количество";
+"Value" = "Стоимость";
+
+/* windows.py: Ships Details window title */
+"Ships Details" = "Детали кораблей";
+
+/* windows.py: Message when ships manager not available */
+"Ships manager not available." = "Менеджер кораблей недоступен.";
+
+/* windows.py: Message when no ships data available for carrier */
+"No ships data available for" = "Нет данных кораблей для";
+
+/* windows.py: Ships window column headers */
+"Ship" = "Корабль";
+"Ship Name" = "Название корабля";
+/* "Last Updated" = "Последнее обновление"; */ /* Already defined in Fleet Carrier headers */

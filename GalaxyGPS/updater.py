@@ -1,13 +1,11 @@
 import json
 import logging
 import os
-import sys
 import traceback
 import zipfile
 
-import requests  # type: ignore
-
-from config import appname  # type: ignore
+from config import appname, user_agent  # type: ignore
+import timeout_session  # type: ignore
 
 # We need a name of plugin dir, not GalaxyGPS.py dir
 plugin_name = os.path.basename(os.path.dirname(os.path.dirname(__file__)))
@@ -30,7 +28,9 @@ class SpanshUpdater():
         url = f'https://github.com/{github_repo}/releases/download/v{self.version}/{self.zip_name}'
 
         try:
-            r = requests.get(url)
+            session = timeout_session.new_session()
+            session.headers['User-Agent'] = user_agent + ' GalaxyGPS'
+            r = session.get(url, timeout=60)
             if r.status_code == 200:
                 with open(self.zip_path, 'wb') as f:
                     logger.info(f"Downloading GalaxyGPS to {self.zip_path}")
@@ -42,8 +42,8 @@ class SpanshUpdater():
         except Exception:
             logger.warning('!! ' + traceback.format_exc(), exc_info=False)
             self.zip_downloaded = False
-        finally:
-            return self.zip_downloaded
+        
+        return self.zip_downloaded
 
     def install(self):
         if self.download_zip():
@@ -63,8 +63,9 @@ class SpanshUpdater():
         
         url = f"https://api.github.com/repos/{github_repo}/releases/latest"
         try:
-            r = requests.get(url, timeout=2)
-            
+            session = timeout_session.new_session()
+            session.headers['User-Agent'] = user_agent + ' GalaxyGPS'
+            r = session.get(url, timeout=2)
             if r.status_code == 200:
                 # Get the changelog and replace all breaklines with simple ones
                 changelogs = json.loads(r.content)["body"]
@@ -73,3 +74,4 @@ class SpanshUpdater():
 
         except Exception:
             logger.warning('!! ' + traceback.format_exc(), exc_info=False)
+        return None

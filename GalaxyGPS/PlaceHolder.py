@@ -33,7 +33,8 @@ class PlaceHolder(Entry):
 
     def set_default_style(self):
         theme = config.get_int('theme')
-        self['fg'] = config.get_str('dark_text') if theme else "black"
+        # Use black for default/light theme (0), orange for dark/transparent themes (1, 2)
+        self['fg'] = "black" if theme == 0 else "orange"
 
     def set_error_style(self, error=True):
         if error:

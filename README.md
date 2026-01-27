@@ -1,103 +1,288 @@
-# EDMC_GalaxyGPS
-## Note on norohind's fork
-This is fork where I updated and evolved from SpanshRouter, all credit to norohind for being my inspiration to build this plugin for public use with the latest version of EDMarketConnector. 
+# GalaxyGPS - Your Ultimate Space Navigation Companion! 🚀
 
-Being inspired by the original program's intent I have greatly expanded it's functionality and brought it up to date with the latest version of Python supported by EDSM, corrected some csv issues and expanded it for maintaining and managing the operating Fleet Carriers. The result was a very robust plugin built on entirely new code which will not only allow you to navigate quickly from SPANSH CSV routes for your ship but also allow you to keep track of your place on the route and see additional information on the fly like road to riches values and system lookups. When plotting Fleet Carrier CSV files it automatically changes tracking methods to help you manage your carrier routes remotely, advancing to the next system waypoint based on your CAPI data and in addition includes lots of quality of life features for quickly looking up various information and keeping track of Tritium levels.
+Welcome to **GalaxyGPS**, the most comprehensive route planning and fleet carrier management plugin for Elite Dangerous! Think of it as your trusty GPS, but for navigating the vast reaches of the galaxy. Whether you're exploring uncharted territories, managing your fleet carrier operations, or planning the perfect Road to Riches expedition, GalaxyGPS has got you covered!
 
-Since most of this code is now foreign to SpanshRouter which served as more of an inspiration than an implimentation I have renamed the plugin to GalaxyGPS which is more in line with what this plugin does. It's like a GPS, but in space!
+## What Makes GalaxyGPS Special? ✨
 
-**See the instructions below to learn how the program works and how to make compatible CSV files.**
+GalaxyGPS started as an evolution from SpanshRouter, but has grown into something entirely new and powerful. Built from the ground up with modern Python and EDMC compatibility, it's packed with features that make space navigation a breeze:
 
-## Version Information
+- **🌍 Multi-Language Support**: Fully localized in 20+ languages! Whether you speak English, German, Japanese, Chinese, or any of our other supported languages, GalaxyGPS speaks your language.
+- **🚢 Fleet Carrier Management**: Complete remote control and tracking of your fleet carriers with real-time data from Frontier's CAPI, including detailed views of cargo, stored ships, and outfitting modules
+- **🗺️ Smart Route Planning**: Import routes from Spansh, create custom routes, or plot directly from EDMC
+- **📍 Intelligent Waypoint Tracking**: Automatic clipboard copying, route resumption, and progress saving
+- **💎 Road to Riches Integration**: Track scan values and terraformable bodies for maximum profit
+- **⛽ Tritium Management**: Never run out of fuel with smart warnings and Inara integration
+- **🔍 Deep Integration**: Seamless connections with EDSM, Inara, and Spansh for all your navigation needs
 
-**Current Version: 1.0.0**
+## Current Version: 1.5.0
 
-With the rename from SpanshRouter to GalaxyGPS and the significant code evolution, the version numbering has been reset to start fresh at **1.0.0**. This represents the first official release under the GalaxyGPS name, marking a new chapter for this plugin.
+This major release brings comprehensive multi-language support, enhanced fleet carrier management features, and numerous quality-of-life improvements. See the [Changelog](CHANGELOG.md) for full details!
 
-## Install
+---
 
-### Prerequisites
+## Key Features 🎯
 
-- **Linux Users**: Install **xclip** before using the plugin:
-  - Debian/Ubuntu: `sudo apt-get install xclip`
-  - Fedora/RHEL: `sudo dnf install xclip`
-  - Arch Linux: `sudo pacman -S xclip`
-  - *Note*: If you're using Wayland, see the [Wayland Support](#wayland-support) section below for alternative setup.
+### 🗺️ Smart Route Planning & Navigation
 
-### Installation Steps
+#### Import Routes from Spansh or Create Your Own
+
+- Import any route from [Spansh Plotter](https://www.spansh.co.uk/plotter) - the plugin automatically detects route types (Galaxy Routes, Fleet Carrier Routes, Road to Riches, Neutron Routes)
+- Create your own custom CSV files with just system names
+- Plot routes directly from EDMC with the "Plot Route" button
+- Automatic waypoint detection - the plugin knows where you are and sets the next destination
+
+#### Automatic Clipboard Integration
+
+- Next waypoint automatically copies to your clipboard when you reach each destination
+- Just paste into the Galaxy Map and jump!
+- Click the waypoint button anytime to copy it again
+
+#### View Your Entire Route
+
+- Click "View Route" to see your complete journey in an easy-to-read table
+- System names link directly to Inara.cz and EDSM.net
+- Current waypoint highlighted in yellow
+- Automatically updates as you progress
+
+#### Never Lose Your Progress
+
+- Routes automatically save when you close EDMC
+- Resume exactly where you left off when you restart
+- If you reload a route, the plugin automatically finds your current position and continues from there
+
+### 🚢 Complete Fleet Carrier Management
+
+#### Track All Your Carriers
+
+- Select any of your fleet carriers from a dropdown menu
+- View carrier name, callsign, current system, and fuel level at a glance
+- See all carriers in one detailed window with comprehensive information
+
+#### Detailed Carrier Information
+
+- **Location**: Current system with links to Inara and EDSM
+- **Fuel Status**: Tritium in tank and cargo, with clickable search for nearby sources
+- **Balance**: Credit balance with proper formatting
+- **Icy Rings & Pristine**: Automatic detection of mining opportunities in the current system
+- **Cargo Details**: View complete cargo manifest with item names, quantities, and values
+- **Stored Ships**: See all ships on your carrier with names and timestamps
+- **Stored Modules**: Browse all outfitting modules available on your carrier, organized by category with prices and engineering status
+
+#### Smart Route Warnings
+
+- Get warned when your carrier needs Tritium restocking
+- One-click search for nearby Tritium sources on Inara
+- Automatic detection based on your route planning
+
+### 💎 Road to Riches & Exploration
+
+#### Track Profitable Bodies
+
+- View terraformable worlds and their scan values
+- See body names, subtypes, and estimated values
+- Perfect for maximizing exploration profits
+
+### 🌍 Multi-Language Support
+
+GalaxyGPS speaks your language! The plugin automatically detects your EDMC language setting and displays everything in your preferred language. Supported languages include:
+
+- **European**: Czech, Dutch, English, Finnish, French, German, Hungarian, Italian, Latvian, Polish, Russian, Slovenian, Spanish, Swedish, Ukrainian
+- **Asian**: Chinese (Simplified), Japanese, Korean
+- **Portuguese**: Portuguese (Brazil), Portuguese (Portugal)
+- **Serbian**: Serbian (Latin), Serbian (Latin, Bosnia and Herzegovina)
+
+All buttons, labels, messages, and windows are fully translated and update automatically when you change your language setting!
+
+---
+
+## Quick Start Guide 🚀
+
+### Getting Started is Easy
+
+1. **Install the Plugin** (see [Installation](#installation) below for detailed steps)
+2. **Enable CAPI** in EDMC Settings (required for fleet carrier features)
+3. **Optional**: Set up EDSM API for Icy Rings/Pristine detection
+4. **Start Using**: Import a route or plot one directly!
+
+### Basic Usage
+
+**To Import a Route:**
+
+1. Generate a route on [Spansh Plotter](https://www.spansh.co.uk/plotter)
+2. Download the CSV file
+3. Click "Import File" in GalaxyGPS
+4. Select your CSV file
+5. Start jumping! The next waypoint automatically copies to your clipboard.
+
+**To Plot a Route:**
+
+1. Click "Plot Route" in GalaxyGPS
+2. Enter your starting system, destination, and jump range
+3. Adjust efficiency slider if desired
+4. Click "Calculate"
+5. Your route is ready!
+
+**To View Your Route:**
+
+- Click "View Route" to see the complete journey
+- Click any system name to open it on Inara or EDSM
+- The current waypoint is highlighted in yellow
+
+**To Manage Your Fleet Carrier:**
+
+- Select your carrier from the dropdown at the top
+- Click "View All" to see all your carriers
+- Click "Cargo", "Ships", or "Modules" buttons to see detailed information
+- Click "Inara" to open your carrier's page on Inara.cz
+
+---
+
+## Installation
+
+### Simple Installation Steps
 
 1. **Open EDMC Plugins Folder**:
    - Launch EDMarketConnector
-   - Go to **Settings** → **Plugins** tab
-   - Click the **"Open"** button to open your plugins directory
+   - Go to **Settings** > **Plugins** tab
+   - Click the **"Open"** button
 
-2. **Download the Latest Release** (Recommended):
+2. **Download the Latest Release**:
    - Visit the [Latest Release Page](https://github.com/Fenris159/EDMC_GalaxyGPS/releases/latest)
-   - Download the **Source code (zip)** file from the latest release
-   - **Important**: Always use releases from this repository (`Fenris159/EDMC_GalaxyGPS`) - older releases from other repositories are outdated and incompatible
+   - Download the **Source code (zip)** file
+   - **Important**: Always use releases from this repository (`Fenris159/EDMC_GalaxyGPS`)
 
 3. **Extract and Install**:
    - Extract the downloaded ZIP file
-   - Create a folder named **`EDMC_GalaxyGPS`** (or any name you prefer) inside your EDMC plugins directory
-   - Copy all extracted files and folders into this new folder
-   - Ensure the folder structure looks like: `plugins/EDMC_GalaxyGPS/GalaxyGPS/`, `plugins/EDMC_GalaxyGPS/load.py`, etc.
+   - Create a folder named **`EDMC_GalaxyGPS`** in your plugins directory
+   - Copy all extracted files into this folder
+   - Ensure the structure looks like: `plugins/EDMC_GalaxyGPS/GalaxyGPS/`, `plugins/EDMC_GalaxyGPS/load.py`, etc.
 
 4. **Restart EDMC**:
    - Close and restart EDMarketConnector
-   - The plugin should appear in the plugins section of EDMC
+   - The plugin should appear in the plugins section
 
-**Alternative Installation** (Not Recommended): If you prefer to use the latest development code instead of a stable release, you can download the repository as a ZIP from the main branch, but releases are recommended for stability.
+### Linux Users - Clipboard Setup
+
+**Standard Linux (X11):**
+
+- Install **xclip**: `sudo apt-get install xclip` (Debian/Ubuntu) or equivalent for your distribution
+
+**Wayland Users:**
+
+- Install **wl-clipboard**: `sudo apt-get install wl-clipboard`
+- Set environment variable: `export EDMC_GALAXYGPS_XCLIP="/usr/bin/wl-copy"`
+- See [Wayland Support](#wayland-support) section below for detailed setup instructions
+
+---
+
+## Requirements 📋
+
+To use all features of GalaxyGPS, you'll need to configure the following in EDMC:
+
+### CAPI (Companion API) - Required for Fleet Carrier Features
+
+1. Open EDMC Settings
+2. Navigate to the "Frontier Auth" or "CAPI" tab
+3. Follow the instructions to authenticate with Frontier's servers
+4. Ensure fleet carrier data fetching is enabled
+
+**Why it's needed**: GalaxyGPS uses CAPI to automatically track your fleet carrier(s) location, fuel, balance, cargo, stored ships, and modules. Without CAPI, fleet carrier features won't work.
+
+### EDSM API - Required for Icy Rings/Pristine Detection
+
+1. Open EDMC Settings
+2. Navigate to the "EDSM" tab
+3. Enter your EDSM API key (get one from [EDSM.net](https://www.edsm.net/en/settings/api))
+4. Ensure the connection is active
+
+**Why it's needed**: The plugin queries EDSM to determine if a carrier's current system has icy rings and if they're pristine quality. This information helps you find the best mining locations.
+
+### INARA API - Optional but Recommended
+
+1. Open EDMC Settings
+2. Navigate to the "Inara" tab
+3. Enter your INARA API key (get one from [INARA.cz](https://inara.cz/settings/api/))
+
+**Why it's recommended**: While most INARA features work via web links, having the API enabled provides better overall EDMC integration.
+
+---
+
+## How GalaxyGPS Works 🎮
+
+### Route Planning Methods
+
+**Import from Spansh:**
+
+- Generate any route type on Spansh Plotter (Galaxy, Fleet Carrier, Road to Riches, Neutron, etc.)
+- Download as CSV
+- Import into GalaxyGPS - it automatically detects the route type and processes it correctly
+
+**Create Custom Routes:**
+
+- Create a simple CSV with "System Name" column (and optionally "Jumps")
+- Import it just like a Spansh route
+- The plugin handles the rest!
+
+**Plot Directly:**
+
+- Use the "Plot Route" button in GalaxyGPS
+- Enter start system, destination, and jump range
+- Adjust efficiency slider for route preferences
+- Click "Calculate" to generate the route via Spansh API
+
+### Route Management Features
+
+- **Automatic Waypoint Detection**: The plugin finds your current position and sets the next waypoint
+- **Progress Saving**: Your route progress saves automatically
+- **Route Resumption**: If you reload a route, it automatically continues from where you are
+- **View Route Window**: See your entire route with all details, links to Inara/EDSM, and visual indicators
+- **Auto-Refresh**: The route window updates automatically as you progress
+
+### Fleet Carrier Features
+
+- **Automatic Tracking**: Carriers are tracked automatically via CAPI
+- **Detailed Views**: Access cargo manifests, stored ships, and outfitting modules
+- **Smart Warnings**: Get notified when Tritium restocking is needed
+- **Quick Links**: One-click access to Inara and EDSM for systems and carriers
+- **Data Persistence**: All carrier data is saved to CSV files for backup and analysis
+
+---
+
+## Technical Details 🔧
 
 ### Wayland Support
 
-If you're using a Wayland desktop environment, **xclip** won't work for clipboard operations. You need to configure the plugin to use **wl-copy** instead.
+If you're using a Wayland desktop environment, you need to configure the plugin to use **wl-copy** instead of xclip.
 
 #### Standard Wayland Installation (Non-Flatpak)
 
-1. **Install wl-clipboard** (contains `wl-copy`):
-   - Debian/Ubuntu: `sudo apt-get install wl-clipboard`
-   - Fedora/RHEL: `sudo dnf install wl-clipboard`
-   - Arch Linux: `sudo pacman -S wl-clipboard`
-
+1. **Install wl-clipboard**: `sudo apt-get install wl-clipboard` (or equivalent)
 2. **Set Environment Variable**:
-   - Before launching EDMC, set the `EDMC_GALAXYGPS_XCLIP` environment variable:
+
    ```bash
    export EDMC_GALAXYGPS_XCLIP="/usr/bin/wl-copy"
-   python EDMarketConnector.py
    ```
-   - Or add it to your shell profile (`.bashrc`, `.zshrc`, etc.) to make it permanent:
+
+   Or add to your shell profile (`.bashrc`, `.zshrc`, etc.):
+
    ```bash
    echo 'export EDMC_GALAXYGPS_XCLIP="/usr/bin/wl-copy"' >> ~/.bashrc
    ```
 
 #### Flatpak Users
 
-If you're running EDMarketConnector as a Flatpak application, you need to grant additional permissions and configure the environment variable. You can do this using **Flatseal** (recommended) or the command line:
-
 **Option A - Using Flatseal (Recommended):**
 
-1. **Install Flatseal**:
-   - Install from your software center or via: `flatpak install flathub com.github.tchx84.Flatseal`
-
-2. **Configure EDMarketConnector**:
-   - Open Flatseal
-   - Select **"EDMarketConnector"** (or `io.edcd.EDMarketConnector`) from the application list
-   - Under **"Socket"** section, enable:
-     - **Wayland windowing system** (`socket=wayland`)
-   - Scroll down to **"Filesystem"** section, enable:
-     - **All system libraries, executables and static data** (`filesystem=host-os`)
-   - Scroll to **"Environment"** section, click **"+"** to add a new variable:
-     - **Name**: `EDMC_GALAXYGPS_XCLIP`
-     - **Value**: `/run/host/usr/bin/wl-copy`
-   - Close Flatseal
-
-3. **Restart EDMC**:
-   - Close EDMarketConnector completely
-   - Restart it through your application launcher
+1. Install Flatseal: `flatpak install flathub com.github.tchx84.Flatseal`
+2. Open Flatseal and select EDMarketConnector
+3. Enable **Wayland windowing system** in Socket section
+4. Enable **All system libraries, executables and static data** in Filesystem section
+5. Add environment variable in Environment section:
+   - **Name**: `EDMC_GALAXYGPS_XCLIP`
+   - **Value**: `/run/host/usr/bin/wl-copy`
+6. Restart EDMC
 
 **Option B - Using Command Line:**
-
-Run this command to configure all required permissions and environment variables:
 
 ```bash
 flatpak override --user io.edcd.EDMarketConnector \
@@ -106,269 +291,57 @@ flatpak override --user io.edcd.EDMarketConnector \
   --env=EDMC_GALAXYGPS_XCLIP=/run/host/usr/bin/wl-copy
 ```
 
-Then restart EDMarketConnector normally through your application launcher.
+Then restart EDMarketConnector.
 
-**Note**: The path `/run/host/usr/bin/wl-copy` is the Flatpak-accessible path to the host system's `wl-copy` binary. This allows the Flatpak application to use the Wayland clipboard tool from your host system.
+### Fleet Carrier CAPI Integration
 
+The plugin automatically tracks your fleet carrier(s) using Frontier's CAPI. When EDMarketConnector fetches fleet carrier data, the plugin:
 
+- **Automatically stores** all carrier information (location, fuel, balance, cargo, ships, modules, state, theme, etc.)
+- **Saves data to CSV files** for easy access and backup:
+  - `fleet_carriers.csv` - Main carrier information
+  - `fleet_carrier_cargo.csv` - Detailed cargo manifest
+  - `fleet_carrier_ships.csv` - Stored ships information
+  - `fleet_carrier_modules.csv` - Stored modules information
+- **Updates automatically** when you dock at your carrier or when journal events occur
 
-## Requirements
+All CSV files use UTF-8 encoding with BOM and persist between EDMC restarts. See `Documentation/CACHE_MODULES_README.md` for detailed column structure information.
 
-To use all features of this plugin, you'll need to configure the following:
+### Plugin Priority
 
-### CAPI (Companion API) Configuration
+This plugin is configured to load **first** in EDMarketConnector, ensuring it appears at the top of the plugin list. This is achieved by:
 
-**Required for Fleet Carrier Management features:**
+- Being a **Package Plugin** (contains both `__init__.py` and `load.py`)
+- Returning `'!GalaxyGPS'` from `plugin_start3()`, which sorts first alphabetically
+- The folder name doesn't affect load order - you can name it anything you want
 
-1. **Enable CAPI in EDMarketConnector**:
-   - Open EDMC Settings
-   - Navigate to the "Frontier Auth" or "CAPI" tab
-   - Follow the instructions to authenticate with Frontier's servers
-   - Ensure that fleet carrier data fetching is enabled
+### Public API
 
-2. **Why it's needed**: The plugin uses CAPI to automatically track your fleet carrier(s) location, fuel (Tritium), balance, cargo, and other carrier information. Without CAPI enabled, fleet carrier features will not work.
+GalaxyGPS provides a stable public API for other EDMC plugins to access route and carrier data. See `Documentation/API_DOCUMENTATION.md` for complete API reference and `examples/galaxygps_api_example/` for usage examples.
 
-**Note**: CAPI data is typically updated when you dock at your fleet carrier or when certain journal events occur.
+---
 
-### EDSM API Connection
+## Updates 🔄
 
-**Required for Icy Rings and Pristine status display:**
-
-1. **Enable EDSM API in EDMarketConnector**:
-   - Open EDMC Settings
-   - Navigate to the "EDSM" tab
-   - Enter your EDSM API key (you can get one from [EDSM.net](https://www.edsm.net/en/settings/api))
-   - Ensure the connection is active
-
-2. **Why it's needed**: The plugin queries the EDSM API to determine if a fleet carrier's current system has icy rings and if those rings are pristine quality. This information is cached in the CSV file to minimize API calls.
-
-**Note**: If EDSM API is not configured, the Icy Rings and Pristine checkboxes will not update automatically.
-
-### INARA API Connection (Optional but Recommended)
-
-**Recommended for enhanced integration:**
-
-1. **Enable INARA API in EDMarketConnector**:
-   - Open EDMC Settings
-   - Navigate to the "Inara" tab
-   - Enter your INARA API key (you can get one from [INARA.cz](https://inara.cz/settings/api/))
-   - Ensure the connection is active
-
-2. **Why it's recommended**: While the plugin works without INARA API (using web links for Inara.cz), having it enabled provides better integration with EDMC's overall data flow.
-
-**Note**: Most INARA features in this plugin work via web links, so the API is optional. However, enabling it provides better overall EDMC integration.
-
-## How to use
-
-### Basic Route Planning
-
-The plugin supports multiple methods for route planning:
-
-#### Importing Routes from Spansh
-
-1. **Generate Route on Spansh**: 
-   - Visit [Spansh Plotter](https://www.spansh.co.uk/plotter)
-   - Configure your route parameters (starting system, destination, jump range, etc.)
-   - Select your route type (Galaxy Route, Fleet Carrier Route, Road to Riches, Neutron Route, etc.)
-   - Generate and download the route as a CSV file
-
-2. **Import CSV into Plugin**:
-   - Click the "Import File" button in the plugin
-   - Navigate to and select your downloaded Spansh CSV file
-   - The plugin will automatically detect the route type based on the CSV columns and process it accordingly
-
-3. **Automatic Route Type Detection**: The plugin automatically identifies route types by analyzing the CSV column headers:
-   - **Fleet Carrier Routes**: Detected by presence of "Restock Tritium", "Icy Ring", or "Pristine" columns
-   - **Galaxy Routes**: Detected by presence of "Refuel" column along with "System Name"
-   - **Road to Riches Routes**: Detected by presence of "Body Name", "Body Subtype", and "Is Terraformable" columns
-   - **Neutron Routes**: Detected by presence of "Neutron Star" column with distance columns
-   - **Generic Routes**: Any CSV with "System Name" and optionally "Jumps" columns
-
-4. **Route Processing**: Once imported, the plugin:
-   - Preserves all columns from the original CSV for display in the "View Route" window
-   - Extracts essential route data (system names, jumps, distances) for route planning
-   - Automatically rounds distance values up to the nearest hundredth for display
-   - Detects your current position and sets the appropriate next waypoint
-
-#### Creating Custom CSV Files
-
-You can also create your own CSV file with minimal requirements:
-- **Required Column**: "System Name" (or "System")
-- **Optional Column**: "Jumps"
-- **Example Format**:
-  ```csv
-  System Name,Jumps
-  Saggitarius A*,5
-  Beagle Point,324
-  ```
-
-#### EDTS File Support
-
-The plugin also supports `.txt` files created with [EDTS](https://bitbucket.org/Esvandiary/edts/wiki/edts) for compatibility with other Elite Dangerous tools.
-
-#### Plot Route Button
-
-- **Initial State**: Click "Plot Route" to show route planning options
-- **Route Options**: Enter starting system, destination system, jump range, and toggle supercharge (orange circular toggle)
-- **Efficiency Slider**: Adjust route efficiency preference
-- **Calculate Button**: After entering options, the button changes to "Calculate" - click it to compute the route via Spansh API
-- **Cancel Button**: Appears next to "Calculate" - click it to return to the default view without calculating
-- **After Calculation**: The button returns to "Plot Route" state after the route is calculated
-
-Once your route is plotted, and every time you reach a waypoint, the next one is automatically copied to your clipboard.
-
-You just need to go to your Galaxy Map and paste it everytime you reach a waypoint.
-
-If for some reason, your clipboard should be empty or containing other stuff that you copied yourself, just click on the **Next waypoint** button, and the waypoint will be copied again to your clipboard.
-
-### Route Management
-
-- **View Route**: Click the "View Route" button to open a window displaying your entire route as an easy-to-read list. Features include:
-  - **System Links**: System names are hyperlinked to Inara.cz for quick access. An "EDSM" button appears before each system name to open the system on EDSM.net as an alternative.
-  - **Route Type Detection**: The window automatically detects route types and displays appropriate columns:
-    - **Fleet Carrier routes**: Shows "Restock Tritium", "Icy Ring", and "Pristine" columns
-    - **Galaxy routes**: Shows "Refuel" and "Neutron Star" columns
-    - **Road to Riches routes**: Shows "Body Name", "Body Subtype", "Is Terraformable", "Estimated Scan Value", and "Estimated Mapping Value" columns
-    - **Neutron routes**: Shows "Neutron Star" column
-  - **Visual Indicators**: 
-    - Checkbox columns (Refuel, Neutron Star, Icy Ring, Pristine, etc.) are displayed as colored dot indicators:
-      - **Red dots**: Indicate "yes" for most checkbox fields
-      - **Light blue dots**: Indicate "yes" for Neutron Star fields (to distinguish from other indicators)
-      - **Gray dots**: Indicate "no" or empty values
-    - All dot indicators are center-aligned within their columns
-  - **Next Waypoint Highlighting**: The current next waypoint row is highlighted in light yellow, making it easy to locate your position in the route. The highlight automatically updates as you progress through the route.
-  - **Automatic Column Sizing**: Columns automatically adjust their width to fit content, preventing text cutoff. The window opens wide enough to display all columns, with horizontal and vertical scrollbars if needed.
-  - **Column Alignment**: 
-    - Text columns are left-aligned
-    - Numeric columns (distances, fuel, values) are right-aligned
-    - Indicator columns (dots) are center-aligned
-  - **Visual Separators**: Column separators (grid lines) help align data with headers for better readability.
-
-- **Route Resumption**: If you accidentally clear your route and need to reload the CSV, the plugin will automatically detect your current location and resume from the appropriate waypoint:
-  - **For regular routes**: Uses your current system location from Elite Dangerous
-  - **For fleet carrier routes**: Uses the selected fleet carrier's current location
-  - The plugin searches through the entire route to find where you are and automatically sets the next waypoint accordingly
-
-- **Save Progress**: If you close EDMC, the plugin will save your progress. The next time you run EDMC, it will start back where you stopped.
-
-- **Route Window Auto-Refresh**: If the "View Route" window is open, it automatically refreshes when the next waypoint changes, updating the highlighted row to show your current position in the route.
-
-### Fleet Carrier Management
-
-The plugin includes comprehensive fleet carrier management features at the top of the main window allowing you to remotely control your carrier of choice and plot it's route:
-
-#### Fleet Carrier Selection
-- **Dropdown Menu**: Select which fleet carrier you want to track from the dropdown menu. The dropdown shows carrier name, callsign, current system, and Tritium fuel level.
-
-- **View All Button**: Click "View All" to open a detailed window showing all your fleet carriers with comprehensive information:
-  - **Select**: Click the "Select" button on any carrier row to set it as the active carrier in the main dropdown
-  - **EDSM Button**: An "EDSM" button appears before each system name to open the system on EDSM.net
-  - **Callsign & Name**: Hyperlinked to Inara.cz - click to view carrier details
-  - **System**: Hyperlinked to Inara.cz - click to view system details
-  - **Tritium**: Shows fuel tank amount and cargo amount (e.g., "1000 / 500"). Displays "Needs Update" if fuel data is missing.
-  - **Balance**: Carrier credit balance (formatted with commas). Displays "Needs Update" if balance data is missing. Legitimate zero values display as "0".
-  - **Cargo**: Cargo count and total value (e.g., "5 (10,000 cr)"). Displays "Needs Update" if cargo data is missing. Legitimate zero values display as "0 (0 cr)".
-  - **State**: Current carrier state
-  - **Theme**: Carrier theme
-  - **Icy Rings**: Colored dot indicator (red for yes, gray for no) - center-aligned in column
-  - **Pristine**: Colored dot indicator (red for yes, gray for no) - center-aligned in column
-  - **Docking Access**: Colored dot indicator (red if access granted, gray if not) - center-aligned in column
-  - **Notorious Access**: Colored dot indicator (red if access granted, gray if not) - center-aligned in column
-  - **Last Updated**: Timestamp of last data update
-  - **Automatic Column Sizing**: Columns automatically adjust their width to fit content, including "Needs Update" text, preventing text cutoff
-  - **Visual Separators**: Column separators (grid lines) help align data with headers for better readability
-
-- **Inara Button**: Click "Inara" to open the Inara.cz page for the currently selected fleet carrier.
-
-#### Fleet Carrier Information Display
-
-Below the dropdown, the plugin displays:
-
-- **System**: Shows the current location of the selected fleet carrier
-
-- **Icy Rings & Pristine**: Indicators showing whether the carrier's current system has:
-  - **Icy Rings**: Any icy rings present in the system
-  - **Pristine**: Pristine quality icy rings (only checked if icy rings are also present)
-  - *Note*: This data is automatically fetched from EDSM API and cached in the CSV to minimize API calls. It updates when the carrier changes location.
-
-- **Tritium**: Displays fuel amount and cargo (e.g., "Tritium: 1000 (In Cargo: 500)"). Click this label to search Inara.cz for nearby Tritium sources using your current system location. If fuel data is missing, displays "Tritium: Unknown" (grayed out and not clickable). Legitimate zero values display as "Tritium: 0".
-
-- **Balance**: Shows the carrier's credit balance (formatted with commas). Displays "Balance: Unknown" (grayed out) if balance data is missing. Legitimate zero values display as "Balance: 0 cr".
-
-#### Fleet Carrier Route Warnings
-
-- **Restock Tritium Warning**: When using a fleet carrier route, the plugin will display a "Warning: Restock Tritium" message (centered and colored red) if the selected carrier is currently in a system from your route that has "Restock Tritium" set to "Yes" on your route CSV.
-
-- **Find Trit Button**: Appears next to the warning. Click it to search Inara.cz for nearby Tritium sources using the carrier's current system location.
-
-#### Missing Data Handling
-
-- **"Needs Update" Display**: If numerical values (balance, cargo value, fuel, or cargo count) are missing from the fleet carrier data, the plugin displays "Needs Update" instead of showing "0" or empty values. This helps distinguish between:
-  - **Legitimate zero values**: Displayed as "0" (e.g., a carrier with zero balance shows "Balance: 0 cr")
-  - **Missing data**: Displayed as "Needs Update" (e.g., if balance hasn't been fetched yet)
-- **Data Refresh**: Missing values will automatically update when CAPI data is refreshed (typically when you dock at your carrier or when certain journal events occur).
-
-## Fleet Carrier CAPI Integration
-
-The plugin now automatically tracks your fleet carrier(s) using Frontier's CAPI (Companion API). When EDMarketConnector fetches fleet carrier data, the plugin will:
-
-- **Automatically store** fleet carrier information including:
-  - Current location (system name and address)
-  - Fuel (Tritium) amount
-  - Credit balance
-  - Cargo count and total value
-  - Carrier state, theme, and docking access settings
-  - Last update timestamp
-  - Source galaxy (Live/Beta/Legacy)
-
-- **Save data to CSV**: All carrier information is stored in `fleet_carriers.csv` in your plugin directory for easy access and backup.
-
-- **Access programmatically**: You can retrieve carrier information using the plugin's API:
-  ```python
-  # Get a specific carrier
-  carrier = galaxy_gps.get_fleet_carrier("A1A-A1A")
-  
-  # Get all carriers
-  all_carriers = galaxy_gps.get_all_fleet_carriers()
-  
-  # Find carriers in a specific system
-  carriers_in_system = galaxy_gps.get_fleet_carriers_in_system("Sol")
-  ```
-
-The CSV file format includes columns: Callsign, Name, Current System, System Address, Fuel (Tritium), Balance, State, Theme, Docking Access, Notorious Access, Cargo Count, Cargo Total Value, Last Updated, and Source Galaxy.
-
-**Note**: Fleet carrier data is automatically updated when EDMarketConnector fetches fresh data from Frontier's CAPI servers (typically when you dock at your carrier or when certain journal events occur).
-
-
-## Plugin Priority
-
-This plugin is configured as a **Package Plugin** (contains both `__init__.py` and `load.py`), which means it will be loaded before regular plugins and appear at the top of the plugin section in the EDMC main window.
-
-## Updates
-
-The plugin features an **automatic update system** that checks for new versions when EDMC starts.
+GalaxyGPS features an **automatic update system** that checks for new versions when EDMC starts.
 
 ### How Auto-Updates Work
 
-1. **Automatic Check**: When EDMC starts, the plugin automatically checks the GitHub repository (`Fenris159/EDMC_GalaxyGPS`) for new versions by comparing the local `version.json` with the remote version.
+1. **Automatic Check**: When EDMC starts, the plugin checks GitHub for new versions
+2. **Update Notification**: If available, a dialog shows the new version and changelog
+3. **Installation**: If you choose to install, the update downloads when you close EDMC
+4. **Manual Updates**: You can also download releases manually from the [GitHub repository](https://github.com/Fenris159/EDMC_GalaxyGPS/releases)
 
-2. **Update Notification**: If a new version is available, a dialog will appear showing:
-   - The new version number
-   - The changelog from the GitHub release
-   - A prompt asking if you want to install the update
+**Note**: Auto-updates require an active internet connection and only download if you confirm the installation prompt.
 
-3. **Installation**: If you choose to install:
-   - The update will be downloaded when you close EDMC
-   - The plugin files will be automatically updated
-   - You'll need to restart EDMC for the update to take effect
-
-4. **Manual Updates**: If you prefer to update manually, you can:
-   - Download the latest release from the [GitHub repository](https://github.com/Fenris159/EDMC_GalaxyGPS/releases)
-   - Extract and replace the plugin files in your EDMC plugins folder
-   - Restart EDMC
-
-**Note**: The auto-update system requires an active internet connection to check for updates. Updates are only downloaded if you confirm the installation prompt.
+---
 
 ## Known Issues
 
-TBD
+Currently, there are no known issues! If you encounter any problems, please report them on the [GitHub Issues page](https://github.com/Fenris159/EDMC_GalaxyGPS/issues).
+
+---
+
+**Happy exploring, Commander!** 🎮✨
+
+*GalaxyGPS - Because even in space, you need directions.*

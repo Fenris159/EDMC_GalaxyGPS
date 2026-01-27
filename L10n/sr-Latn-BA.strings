@@ -1,0 +1,285 @@
+/* GalaxyGPS Plugin Serbian (Latin, Bosnia and Herzegovina) Translation */
+
+/* load.py: Update notification dialog */
+"New GalaxyGPS update available!" = "Dostupno novo GalaxyGPS ažuriranje!";
+
+/* load.py: Update installation instructions */
+"If you choose to install it, you will have to restart EDMC for it to take effect." = "Ako odlučite da ga instalirate, moraćete da restartujete EDMC da bi stupilo na snagu.";
+
+/* load.py: Prompt to install update */
+"Install?" = "Instalirati?";
+
+/* load.py: Confirmation message after accepting update */
+"The update will be installed as soon as you quit EDMC." = "Ažuriranje će biti instalirano čim zatvorite EDMC.";
+
+/* load.py: Error dialog title */
+"GalaxyGPS Error" = "GalaxyGPS greška";
+
+/* load.py: Error message when plugin fails to initialize */
+"Failed to initialize plugin:{CR}{ERROR}{CR}{CR}Check EDMC log for details." = "Neuspešna inicijalizacija dodatka:{CR}{ERROR}{CR}{CR}Proverite EDMC log za detalje.";
+
+/* GalaxyGPS.py: Button to view all fleet carriers */
+"View All" = "Prikaži sve";
+
+/* GalaxyGPS.py: Button to open Inara website */
+"Inara" = "Inara";
+
+/* GalaxyGPS.py: Button to find tritium on Inara */
+"Find Trit" = "Pronađi tricijum";
+
+/* GalaxyGPS.py: Button to import route from CSV file */
+"Import file" = "Uvezi fajl";
+
+/* GalaxyGPS.py: Button to view current route */
+"View Route" = "Prikaži rutu";
+
+/* GalaxyGPS.py: Button to show route plotting GUI */
+"Plot route" = "Nacrtaj rutu";
+
+/* GalaxyGPS.py: Button to calculate/compute route */
+"Calculate" = "Izračunaj";
+
+/* GalaxyGPS.py: Button to cancel route plotting */
+"Cancel" = "Otkaži";
+
+/* GalaxyGPS.py: Button to clear current route */
+"Clear route" = "Obriši rutu";
+
+/* GalaxyGPS.py: Button text during route calculation */
+"Computing..." = "Računanje...";
+
+/* GalaxyGPS.py: Label for fleet carrier selector */
+"Fleet Carrier:" = "Nosač flote:";
+
+/* GalaxyGPS.py: Label for fleet carrier system display */
+"System:" = "Sistem:";
+
+/* GalaxyGPS.py: Label for icy rings status */
+"Icy Rings" = "Ledeni prstenovi";
+
+/* GalaxyGPS.py: Label for pristine ring status */
+"Pristine" = "Netaknuto";
+
+/* GalaxyGPS.py: Label for fleet carrier balance */
+"Balance:" = "Stanje:";
+
+/* GalaxyGPS.py: Label for neutron star supercharge toggle */
+"Supercharge" = "Superpunjenje";
+
+/* GalaxyGPS.py: Placeholder text for source system input */
+"Source System" = "Izvorni sistem";
+
+/* GalaxyGPS.py: Placeholder text for destination system input */
+"Destination System" = "Sistem odredišta";
+
+/* GalaxyGPS.py: Placeholder text for jump range input */
+"Range (LY)" = "Domet (LY)";
+
+/* GalaxyGPS.py: Label for efficiency slider */
+"Efficiency (%)" = "Efikasnost (%)";
+
+/* GalaxyGPS.py: Confirmation dialog for clearing route */
+"Are you sure you want to clear the current route?" = "Da li ste sigurni da želite da obrišete trenutnu rutu?";
+
+/* GalaxyGPS.py: Warning when no fleet carrier selected */
+"No Carrier Selected" = "Nosač nije izabran";
+
+/* GalaxyGPS.py: Message when no fleet carrier selected */
+"Please select a fleet carrier first." = "Molimo prvo izaberite nosač flote.";
+
+/* GalaxyGPS.py: Error dialog title */
+"Error" = "Greška";
+
+/* GalaxyGPS.py: Error opening Inara website */
+"Failed to open Inara page." = "Neuspešno otvaranje Inara stranice.";
+
+/* GalaxyGPS.py: Warning when carrier system unknown */
+"No System" = "Nema sistema";
+
+/* GalaxyGPS.py: Message when carrier system unknown */
+"Could not determine carrier's current system." = "Nije moguće odrediti trenutni sistem nosača.";
+
+/* GalaxyGPS.py: Error opening Inara tritium search */
+"Failed to open Inara Tritium search." = "Neuspešno otvaranje Inara pretrage tricijuma.";
+
+/* GalaxyGPS.py: Warning when no carrier data available */
+"No Carrier Data" = "Nema podataka nosača";
+
+/* GalaxyGPS.py: Message when no carrier data available */
+"No fleet carrier data available." = "Nema dostupnih podataka nosača flote.";
+
+/* GalaxyGPS.py: Warning when carrier system location unknown */
+"Could not determine carrier's current system location." = "Nije moguće odrediti lokaciju trenutnog sistema nosača.";
+
+/* GalaxyGPS.py: Warning when no carrier selected */
+"No Carrier" = "Nema nosača";
+
+/* GalaxyGPS.py: Message when no carrier selected */
+"No fleet carrier selected." = "Nosač flote nije izabran.";
+
+/* windows.py: Window title for fleet carrier list */
+"Fleet Carriers" = "Nosači flote";
+
+/* windows.py: Info message when no route is loaded */
+"No route is currently loaded." = "Trenutno nije učitana nijedna ruta.";
+
+/* windows.py: Warning dialog title for missing route file */
+"Route File Not Found" = "Fajl rute nije pronađen";
+
+/* windows.py: Warning message about missing route file */
+"Route CSV file not found. Please import the route again." = "CSV fajl rute nije pronađen. Molimo uvezite rutu ponovo.";
+
+/* windows.py: Info when no route data to display */
+"No route data to display." = "Nema podataka rute za prikaz.";
+
+/* windows.py: Error reading route CSV file */
+"Failed to read route CSV file." = "Neuspešno čitanje CSV fajla rute.";
+
+/* windows.py: Error displaying carrier details */
+"Failed to display carrier details." = "Neuspešno prikazivanje detalja nosača.";
+
+/* windows.py: Error displaying route */
+"Failed to display route." = "Neuspešno prikazivanje rute.";
+
+/* windows.py: Error opening cargo details */
+"Failed to open cargo details: {ERROR}" = "Neuspešno otvaranje detalja tereta: {ERROR}";
+
+/* windows.py: Error opening ships details */
+"Failed to open ships details: {ERROR}" = "Neuspešno otvaranje detalja brodova: {ERROR}";
+
+/* GalaxyGPS.py: Label prefix for next waypoint in route */
+"Next waypoint: " = "Sledeći waypoint: ";
+
+/* GalaxyGPS.py: Label for estimated jumps remaining */
+"Estimated jumps left: " = "Procenjeno preostalih skokova: ";
+
+/* GalaxyGPS.py: Label for bodies to scan at current system */
+"Bodies to scan at: " = "Tela za skeniranje u: ";
+
+/* GalaxyGPS.py: Warning label when tritium restock needed */
+"Warning: Restock Tritium" = "Upozorenje: Dopunite tricijum";
+
+/* GalaxyGPS.py: Reminder label to refuel ship */
+"Time to scoop some fuel" = "Vreme da sakupite gorivo";
+
+/* GalaxyGPS.py: Label for next waypoint jumps count */
+"Next waypoint jumps" = "Skokovi do sledećeg waypointa";
+
+/* windows.py: Window title for fleet carrier details */
+"Fleet Carrier Details" = "Detalji nosača flote";
+
+/* windows.py: Window title for route view */
+"Route View" = "Pregled rute";
+
+/* GalaxyGPS.py: Message shown at start of route */
+"Start of the journey" = "Početak putovanja";
+
+/* GalaxyGPS.py: Label for remaining jumps after current waypoint */
+"Remaining jumps afterwards" = "Preostali skokovi nakon toga";
+
+/* GalaxyGPS.py: Message shown when route is completed */
+"Finished" = "Završeno";
+
+/* GalaxyGPS.py: Label for next jump distance in LY */
+"Next jump LY" = "Sledeći skok LY";
+
+/* GalaxyGPS.py: Label for distance remaining to destination */
+"Distance Remaining" = "Preostala udaljenost";
+
+/* Fleet Carrier window headers */
+"Select" = "Izaberi";
+"Callsign" = "Pozivni znak";
+"Name" = "Ime";
+"EDSM" = "EDSM";
+"System" = "Sistem";
+"Tritium" = "Tricijum";
+"Balance" = "Stanje";
+"Cargo" = "Teret";
+"Shipyard" = "Brodogradilište";
+"State" = "Stanje";
+"Theme" = "Tema";
+"Docking Access" = "Pristup pristajanju";
+"Notorious Access" = "Zloglasni pristup";
+"Last Updated" = "Poslednje ažurirano";
+
+/* Route View window headers - Common */
+"System Name" = "Ime sistema";
+"Distance" = "Udaljenost";
+"Distance To Arrival" = "Udaljenost do dolaska";
+"Jumps" = "Skokovi";
+"Fuel Left" = "Preostalo gorivo";
+"Fuel Used" = "Iskorišćeno gorivo";
+"Refuel" = "Tankovanje";
+"Neutron Star" = "Neutronska zvezda";
+
+/* Route View window headers - Fleet Carrier */
+"Tritium in tank" = "Tricijum u rezervoaru";
+"Tritium in market" = "Tricijum na tržištu";
+"Icy Ring" = "Ledeni prsten";
+"Pristine" = "Netaknuto";
+"Restock Tritium" = "Dopunite tricijum";
+
+/* Route View window headers - Road to Riches */
+"Body Name" = "Ime tela";
+"Body Subtype" = "Podtip tela";
+"Is Terraformable" = "Je terraformabilno";
+"Estimated Scan Value" = "Procenjena vrednost skeniranja";
+"Estimated Mapping Value" = "Procenjena vrednost mapiranja";
+
+/* GalaxyGPS.py: Label for fuel used in route */
+"Fuel Used" = "Iskorišćeno gorivo";
+
+/* GalaxyGPS.py: Label for fuel remaining in route */
+"Fuel Remaining" = "Preostalo gorivo";
+
+/* GalaxyGPS.py: Label for number of jumps to waypoint */
+"Number of Jumps" = "Broj skokova";
+
+/* GalaxyGPS.py: Urgent warning to restock tritium */
+"Restock Tritium Now" = "Dopunite tricijum sada";
+
+/* GalaxyGPS.py: Warning when destination system is missing in route planner */
+"Please provide a destination system." = "Molimo navedite sistem odredišta.";
+
+/* GalaxyGPS.py: Error message when route plotting fails */
+"Error while trying to plot a route, please try again." = "Greška pri pokušaju crtanja rute, molimo pokušajte ponovo.";
+
+/* message_dialog.py: Yes button in confirmation dialogs */
+"Yes" = "Da";
+
+/* message_dialog.py: No button in confirmation dialogs */
+"No" = "Ne";
+
+/* message_dialog.py: OK button in dialogs */
+"OK" = "U redu";
+
+/* message_dialog.py: Cancel button in dialogs - already defined in GalaxyGPS.py but also used here */
+/* "Cancel" = "Otkaži"; */
+
+/* windows.py: Cargo Details window title */
+"Cargo Details" = "Detalji tereta";
+
+/* windows.py: Message when cargo manager not available */
+"Cargo manager not available." = "Menadžer tereta nije dostupan.";
+
+/* windows.py: Message when no cargo data available for carrier */
+"No cargo data available for" = "Nema dostupnih podataka tereta za";
+
+/* windows.py: Cargo window column headers */
+"Cargo" = "Teret";
+"Quantity" = "Količina";
+"Value" = "Vrednost";
+
+/* windows.py: Ships Details window title */
+"Ships Details" = "Detalji brodova";
+
+/* windows.py: Message when ships manager not available */
+"Ships manager not available." = "Menadžer brodova nije dostupan.";
+
+/* windows.py: Message when no ships data available for carrier */
+"No ships data available for" = "Nema dostupnih podataka brodova za";
+
+/* windows.py: Ships window column headers */
+"Ship" = "Brod";
+"Ship Name" = "Ime broda";
+/* "Last Updated" = "Poslednje ažurirano"; */ /* Already defined in Fleet Carrier headers */

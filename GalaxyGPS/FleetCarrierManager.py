@@ -58,7 +58,7 @@ class FleetCarrierManager:
         Load fleet carrier data from CSV file.
         """
         if not os.path.exists(self.carriers_file):
-            logger.info("No existing fleet carriers file found")
+            logger.debug("No existing fleet carriers file found")
             return
         
         try:
@@ -139,13 +139,15 @@ class FleetCarrierManager:
         except Exception:
             logger.warning('!! Error saving fleet carriers: ' + traceback.format_exc(), exc_info=False)
     
-    def update_carrier_from_capi(self, data, source_galaxy: str) -> None:
+    def update_carrier_from_capi(self, data, source_galaxy: str, event_timestamp: Optional[str] = None) -> None:
         """
         Update fleet carrier data from CAPI response.
+        Uses timestamp comparison to only update if CAPI data is newer than existing Journal data.
         
         Args:
             data: CAPIData object containing fleet carrier information
             source_galaxy: Source galaxy (SERVER_LIVE, SERVER_BETA, SERVER_LEGACY)
+            event_timestamp: Optional timestamp from triggering event (ISO 8601 format: YYYY-MM-DDTHH:MM:SSZ)
         """
         try:
             # Extract carrier information from CAPI data
@@ -163,6 +165,34 @@ class FleetCarrierManager:
             if not callsign:
                 logger.warning("CAPI fleet carrier data missing callsign")
                 return
+            
+            # Get timestamp - use event timestamp if provided, otherwise use current time
+            if event_timestamp:
+                timestamp = event_timestamp
+            else:
+                # CAPI doesn't have timestamps, so use current time as best estimate
+                timestamp = datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ')
+            
+            # Check if we have existing carrier data and compare timestamps
+            if callsign in self.carriers:
+                existing_timestamp = self.carriers[callsign].get('last_updated', '')
+                
+                # Compare timestamps - only update if new data is newer
+                try:
+                    # Try new format first (ISO 8601)
+                    try:
+                        existing_dt = datetime.strptime(existing_timestamp, '%Y-%m-%dT%H:%M:%SZ')
+                    except ValueError:
+                        # Fall back to old format for backward compatibility
+                        existing_dt = datetime.strptime(existing_timestamp, '%Y-%m-%d %H:%M:%S UTC')
+                    
+                    new_dt = datetime.strptime(timestamp, '%Y-%m-%dT%H:%M:%SZ')
+                    
+                    if new_dt < existing_dt:
+                        logger.info(f"Skipping CAPI carrier update for {callsign} - existing data is newer (existing: {existing_timestamp}, new: {timestamp})")
+                        return
+                except (ValueError, TypeError) as e:
+                    logger.debug(f"Could not compare timestamps for {callsign}: {e}. Proceeding with update.")
             
             # Get current system - can be a string or dict
             current_star_system = carrier_data.get('currentStarSystem', '')
@@ -261,11 +291,11 @@ class FleetCarrierManager:
                 'tritium_in_cargo': str(tritium_in_cargo),
                 'icy_rings': icy_rings,  # Preserve existing or empty string
                 'pristine': pristine,  # Preserve existing or empty string
-                'last_updated': datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S UTC'),
+                'last_updated': timestamp,
                 'source_galaxy': source_galaxy
             }
             
-            logger.info(f"Updated fleet carrier {callsign} ({carrier_name}) in {current_system}")
+            logger.info(f"Updated fleet carrier {callsign} ({carrier_name}) in {current_system} (timestamp: {timestamp})")
             
             # Save to CSV
             self.save_carriers()
@@ -439,7 +469,8 @@ class FleetCarrierManager:
     def update_carrier_from_journal(self, event_name: str, event_data: Dict, state: Optional[Dict] = None, source_galaxy: str = 'Live') -> bool:
         """
         Update fleet carrier data from journal events (fallback to CAPI data).
-        Only updates if carrier already exists in our records (from CAPI).
+        For CarrierStats event, creates carrier if it doesn't exist (since this event only fires for YOUR carriers).
+        Uses timestamp comparison to only update if Journal data is newer than existing data.
         
         Args:
             event_name: Name of the journal event
@@ -450,11 +481,116 @@ class FleetCarrierManager:
         Returns:
             True if carrier was updated, False if not found or event not supported
         """
-        # Find which carrier this event belongs to
+        # Get event timestamp (all journal events have this)
+        event_timestamp = event_data.get('timestamp', '')
+        if not event_timestamp:
+            # If no timestamp, use current time (shouldn't happen)
+            event_timestamp = datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ')
+        
+        # Special handling for CarrierStats - this event ONLY fires for carriers you own
+        # So we can bootstrap the carrier data even without CAPI
+        if event_name == 'CarrierStats':
+            callsign = event_data.get('Callsign', '').strip()
+            name = event_data.get('Name', '').strip()
+            
+            if callsign:
+                # Create carrier if it doesn't exist
+                if callsign not in self.carriers:
+                    logger.info(f"Bootstrapping carrier {callsign} from CarrierStats event (before CAPI)")
+                    self.carriers[callsign] = {
+                        'callsign': callsign,
+                        'name': name if name else 'Unknown',
+                        'current_system': '',  # Will be filled by Location/CarrierJump
+                        'system_address': '',
+                        'fuel': '0',
+                        'balance': '0',
+                        'state': '',
+                        'theme': '',
+                        'docking_access': '',
+                        'notorious_access': '',
+                        'cargo_count': '0',
+                        'cargo_total_value': '0',
+                        'tritium_in_cargo': '0',
+                        'icy_rings': 'False',
+                        'pristine': 'False',
+                        'last_updated': event_timestamp,
+                        'source_galaxy': source_galaxy
+                    }
+                
+                # Check timestamp before updating existing carrier
+                if callsign in self.carriers:
+                    existing_timestamp = self.carriers[callsign].get('last_updated', '')
+                    
+                    try:
+                        # Try new format first (ISO 8601)
+                        try:
+                            existing_dt = datetime.strptime(existing_timestamp, '%Y-%m-%dT%H:%M:%SZ')
+                        except ValueError:
+                            # Fall back to old format for backward compatibility
+                            existing_dt = datetime.strptime(existing_timestamp, '%Y-%m-%d %H:%M:%S UTC')
+                        
+                        new_dt = datetime.strptime(event_timestamp, '%Y-%m-%dT%H:%M:%SZ')
+                        
+                        if new_dt < existing_dt:
+                            logger.debug(f"Skipping Journal carrier update for {callsign} - existing data is newer (existing: {existing_timestamp}, new: {event_timestamp})")
+                            return False
+                    except (ValueError, TypeError) as e:
+                        logger.debug(f"Could not compare timestamps for {callsign}: {e}. Proceeding with update.")
+                
+                # Now update with CarrierStats data
+                updated = False
+                fuel_level = event_data.get('FuelLevel')
+                carrier_balance = event_data.get('CarrierBalance')
+                
+                if fuel_level is not None:
+                    self.carriers[callsign]['fuel'] = str(fuel_level)
+                    updated = True
+                
+                if carrier_balance is not None:
+                    self.carriers[callsign]['balance'] = str(carrier_balance)
+                    updated = True
+                
+                # Update cargo from SpaceUsage
+                space_usage = event_data.get('SpaceUsage', {})
+                if isinstance(space_usage, dict):
+                    cargo_for_sale = space_usage.get('CargoForSale', 0)
+                    cargo_not_for_sale = space_usage.get('CargoNotForSale', 0)
+                    total_cargo = cargo_for_sale + cargo_not_for_sale
+                    if total_cargo >= 0:
+                        self.carriers[callsign]['cargo_count'] = str(total_cargo)
+                        updated = True
+                
+                if updated:
+                    self.carriers[callsign]['last_updated'] = event_timestamp
+                    self.save_carriers()
+                    logger.info(f"Updated carrier {callsign} stats from CarrierStats (timestamp: {event_timestamp})")
+                
+                return updated
+        
+        # For all other events, find which carrier this event belongs to
         callsign = self.find_carrier_for_journal_event(event_data, state)
         
         if not callsign or callsign not in self.carriers:
             return False
+        
+        # Check timestamp before updating
+        existing_timestamp = self.carriers[callsign].get('last_updated', '')
+        
+        try:
+            # Try new format first (ISO 8601)
+            try:
+                existing_dt = datetime.strptime(existing_timestamp, '%Y-%m-%dT%H:%M:%SZ')
+            except ValueError:
+                # Fall back to old format for backward compatibility
+                existing_dt = datetime.strptime(existing_timestamp, '%Y-%m-%d %H:%M:%S UTC')
+            
+            new_dt = datetime.strptime(event_timestamp, '%Y-%m-%dT%H:%M:%SZ')
+            
+            if new_dt < existing_dt:
+                logger.debug(f"Skipping Journal event {event_name} for {callsign} - existing data is newer (existing: {existing_timestamp}, new: {event_timestamp})")
+                return False
+        except (ValueError, TypeError) as e:
+            logger.debug(f"Could not compare timestamps for {callsign}: {e}. Proceeding with update.")
         
         updated = False
         
@@ -472,9 +608,9 @@ class FleetCarrierManager:
                     # Clear rings status when system changes (will need to be re-queried)
                     self.carriers[callsign]['icy_rings'] = ''
                     self.carriers[callsign]['pristine'] = ''
-                    self.carriers[callsign]['last_updated'] = datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S UTC')
+                    self.carriers[callsign]['last_updated'] = event_timestamp
                     updated = True
-                    logger.info(f"Updated carrier {callsign} location from CarrierJump: {old_system} -> {new_system} (rings status cleared)")
+                    logger.info(f"Updated carrier {callsign} location from CarrierJump: {old_system} -> {new_system} (rings status cleared, timestamp: {event_timestamp})")
             
             elif event_name == 'CarrierDepositFuel':
                 # Update fuel level
@@ -482,12 +618,13 @@ class FleetCarrierManager:
                 if total_fuel is not None:
                     old_fuel = self.carriers[callsign].get('fuel', '0')
                     self.carriers[callsign]['fuel'] = str(total_fuel)
-                    self.carriers[callsign]['last_updated'] = datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S UTC')
+                    self.carriers[callsign]['last_updated'] = event_timestamp
                     updated = True
-                    logger.info(f"Updated carrier {callsign} fuel from CarrierDepositFuel: {old_fuel} -> {total_fuel}")
+                    logger.info(f"Updated carrier {callsign} fuel from CarrierDepositFuel: {old_fuel} -> {total_fuel} (timestamp: {event_timestamp})")
             
             elif event_name == 'CarrierStats':
-                # Comprehensive stats update
+                # This case is now handled at the top of the function
+                # (kept here as a safety fallback for already-known carriers)
                 fuel_level = event_data.get('FuelLevel')
                 carrier_balance = event_data.get('CarrierBalance')
                 
@@ -511,8 +648,8 @@ class FleetCarrierManager:
                         updated = True
                 
                 if updated:
-                    self.carriers[callsign]['last_updated'] = datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S UTC')
-                    logger.info(f"Updated carrier {callsign} stats from CarrierStats")
+                    self.carriers[callsign]['last_updated'] = event_timestamp
+                    logger.info(f"Updated carrier {callsign} stats from CarrierStats (timestamp: {event_timestamp})")
             
             elif event_name == 'Cargo':
                 # Cargo event - update cargo count and value
@@ -546,9 +683,9 @@ class FleetCarrierManager:
                     self.carriers[callsign]['cargo_count'] = str(cargo_count)
                     self.carriers[callsign]['cargo_total_value'] = str(cargo_value)
                     self.carriers[callsign]['tritium_in_cargo'] = str(tritium_in_cargo)
-                    self.carriers[callsign]['last_updated'] = datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S UTC')
+                    self.carriers[callsign]['last_updated'] = event_timestamp
                     updated = True
-                    logger.info(f"Updated carrier {callsign} cargo from Cargo event: {cargo_count} items, {cargo_value} cr, Tritium: {tritium_in_cargo}")
+                    logger.info(f"Updated carrier {callsign} cargo from Cargo event: {cargo_count} items, {cargo_value} cr, Tritium: {tritium_in_cargo} (timestamp: {event_timestamp})")
             
             # Save to CSV if updated
             if updated:

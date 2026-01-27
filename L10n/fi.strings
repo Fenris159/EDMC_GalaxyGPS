@@ -1,0 +1,285 @@
+/* GalaxyGPS Plugin Finnish Translation */
+
+/* load.py: Update notification dialog */
+"New GalaxyGPS update available!" = "Uusi GalaxyGPS-päivitys saatavilla!";
+
+/* load.py: Update installation instructions */
+"If you choose to install it, you will have to restart EDMC for it to take effect." = "Jos päätät asentaa sen, sinun on käynnistettävä EDMC uudelleen, jotta se tulee voimaan.";
+
+/* load.py: Prompt to install update */
+"Install?" = "Asenna?";
+
+/* load.py: Confirmation message after accepting update */
+"The update will be installed as soon as you quit EDMC." = "Päivitys asennetaan heti, kun suljet EDMC:n.";
+
+/* load.py: Error dialog title */
+"GalaxyGPS Error" = "GalaxyGPS-virhe";
+
+/* load.py: Error message when plugin fails to initialize */
+"Failed to initialize plugin:{CR}{ERROR}{CR}{CR}Check EDMC log for details." = "Liitännäisen alustus epäonnistui:{CR}{ERROR}{CR}{CR}Tarkista EDMC-loki yksityiskohtia varten.";
+
+/* GalaxyGPS.py: Button to view all fleet carriers */
+"View All" = "Näytä kaikki";
+
+/* GalaxyGPS.py: Button to open Inara website */
+"Inara" = "Inara";
+
+/* GalaxyGPS.py: Button to find tritium on Inara */
+"Find Trit" = "Etsi tritiumia";
+
+/* GalaxyGPS.py: Button to import route from CSV file */
+"Import file" = "Tuo tiedosto";
+
+/* GalaxyGPS.py: Button to view current route */
+"View Route" = "Näytä reitti";
+
+/* GalaxyGPS.py: Button to show route plotting GUI */
+"Plot route" = "Piirrä reitti";
+
+/* GalaxyGPS.py: Button to calculate/compute route */
+"Calculate" = "Laske";
+
+/* GalaxyGPS.py: Button to cancel route plotting */
+"Cancel" = "Peruuta";
+
+/* GalaxyGPS.py: Button to clear current route */
+"Clear route" = "Tyhjennä reitti";
+
+/* GalaxyGPS.py: Button text during route calculation */
+"Computing..." = "Lasketaan...";
+
+/* GalaxyGPS.py: Label for fleet carrier selector */
+"Fleet Carrier:" = "Laivaston kantaja:";
+
+/* GalaxyGPS.py: Label for fleet carrier system display */
+"System:" = "Järjestelmä:";
+
+/* GalaxyGPS.py: Label for icy rings status */
+"Icy Rings" = "Jäärenkaat";
+
+/* GalaxyGPS.py: Label for pristine ring status */
+"Pristine" = "Koskematon";
+
+/* GalaxyGPS.py: Label for fleet carrier balance */
+"Balance:" = "Saldo:";
+
+/* GalaxyGPS.py: Label for neutron star supercharge toggle */
+"Supercharge" = "Ylilataus";
+
+/* GalaxyGPS.py: Placeholder text for source system input */
+"Source System" = "Lähdejärjestelmä";
+
+/* GalaxyGPS.py: Placeholder text for destination system input */
+"Destination System" = "Kohdejärjestelmä";
+
+/* GalaxyGPS.py: Placeholder text for jump range input */
+"Range (LY)" = "Kantama (LY)";
+
+/* GalaxyGPS.py: Label for efficiency slider */
+"Efficiency (%)" = "Tehokkuus (%)";
+
+/* GalaxyGPS.py: Confirmation dialog for clearing route */
+"Are you sure you want to clear the current route?" = "Haluatko varmasti tyhjentää nykyisen reitin?";
+
+/* GalaxyGPS.py: Warning when no fleet carrier selected */
+"No Carrier Selected" = "Kantajaa ei valittu";
+
+/* GalaxyGPS.py: Message when no fleet carrier selected */
+"Please select a fleet carrier first." = "Valitse ensin laivaston kantaja.";
+
+/* GalaxyGPS.py: Error dialog title */
+"Error" = "Virhe";
+
+/* GalaxyGPS.py: Error opening Inara website */
+"Failed to open Inara page." = "Inara-sivun avaaminen epäonnistui.";
+
+/* GalaxyGPS.py: Warning when carrier system unknown */
+"No System" = "Ei järjestelmää";
+
+/* GalaxyGPS.py: Message when carrier system unknown */
+"Could not determine carrier's current system." = "Kantajan nykyistä järjestelmää ei voitu määrittää.";
+
+/* GalaxyGPS.py: Error opening Inara tritium search */
+"Failed to open Inara Tritium search." = "Inara-tritiumhaku ei avautunut.";
+
+/* GalaxyGPS.py: Warning when no carrier data available */
+"No Carrier Data" = "Ei kantajatietoja";
+
+/* GalaxyGPS.py: Message when no carrier data available */
+"No fleet carrier data available." = "Laivaston kantajatietoja ei ole saatavilla.";
+
+/* GalaxyGPS.py: Warning when carrier system location unknown */
+"Could not determine carrier's current system location." = "Kantajan nykyistä järjestelmäsijaintia ei voitu määrittää.";
+
+/* GalaxyGPS.py: Warning when no carrier selected */
+"No Carrier" = "Ei kantajaa";
+
+/* GalaxyGPS.py: Message when no carrier selected */
+"No fleet carrier selected." = "Laivaston kantajaa ei ole valittu.";
+
+/* windows.py: Window title for fleet carrier list */
+"Fleet Carriers" = "Laivaston kantajat";
+
+/* windows.py: Info message when no route is loaded */
+"No route is currently loaded." = "Reittiä ei ole tällä hetkellä ladattu.";
+
+/* windows.py: Warning dialog title for missing route file */
+"Route File Not Found" = "Reittitiedostoa ei löydy";
+
+/* windows.py: Warning message about missing route file */
+"Route CSV file not found. Please import the route again." = "Reitti CSV-tiedostoa ei löydy. Tuo reitti uudelleen.";
+
+/* windows.py: Info when no route data to display */
+"No route data to display." = "Ei reittitietoja näytettäväksi.";
+
+/* windows.py: Error reading route CSV file */
+"Failed to read route CSV file." = "Reitti CSV-tiedoston lukeminen epäonnistui.";
+
+/* windows.py: Error displaying carrier details */
+"Failed to display carrier details." = "Kantajan tietojen näyttäminen epäonnistui.";
+
+/* windows.py: Error displaying route */
+"Failed to display route." = "Reitin näyttäminen epäonnistui.";
+
+/* windows.py: Error opening cargo details */
+"Failed to open cargo details: {ERROR}" = "Rahtitietojen avaaminen epäonnistui: {ERROR}";
+
+/* windows.py: Error opening ships details */
+"Failed to open ships details: {ERROR}" = "Alusten tietojen avaaminen epäonnistui: {ERROR}";
+
+/* GalaxyGPS.py: Label prefix for next waypoint in route */
+"Next waypoint: " = "Seuraava waypoint: ";
+
+/* GalaxyGPS.py: Label for estimated jumps remaining */
+"Estimated jumps left: " = "Arvioituja hyppyjä jäljellä: ";
+
+/* GalaxyGPS.py: Label for bodies to scan at current system */
+"Bodies to scan at: " = "Skannattavat kappaleet: ";
+
+/* GalaxyGPS.py: Warning label when tritium restock needed */
+"Warning: Restock Tritium" = "Varoitus: Täydennä tritiumia";
+
+/* GalaxyGPS.py: Reminder label to refuel ship */
+"Time to scoop some fuel" = "Aika kerätä polttoainetta";
+
+/* GalaxyGPS.py: Label for next waypoint jumps count */
+"Next waypoint jumps" = "Hyppyjä seuraavaan waypointiin";
+
+/* windows.py: Window title for fleet carrier details */
+"Fleet Carrier Details" = "Laivaston kantajan tiedot";
+
+/* windows.py: Window title for route view */
+"Route View" = "Reittinäkymä";
+
+/* GalaxyGPS.py: Message shown at start of route */
+"Start of the journey" = "Matkan alku";
+
+/* GalaxyGPS.py: Label for remaining jumps after current waypoint */
+"Remaining jumps afterwards" = "Jäljellä olevat hypyt sen jälkeen";
+
+/* GalaxyGPS.py: Message shown when route is completed */
+"Finished" = "Valmis";
+
+/* GalaxyGPS.py: Label for next jump distance in LY */
+"Next jump LY" = "Seuraava hyppy LY";
+
+/* GalaxyGPS.py: Label for distance remaining to destination */
+"Distance Remaining" = "Jäljellä oleva etäisyys";
+
+/* Fleet Carrier window headers */
+"Select" = "Valitse";
+"Callsign" = "Kutsumerkki";
+"Name" = "Nimi";
+"EDSM" = "EDSM";
+"System" = "Järjestelmä";
+"Tritium" = "Tritium";
+"Balance" = "Saldo";
+"Cargo" = "Rahti";
+"Shipyard" = "Telakka";
+"State" = "Tila";
+"Theme" = "Teema";
+"Docking Access" = "Telakoitumispääsy";
+"Notorious Access" = "Pahamaineinen pääsy";
+"Last Updated" = "Viimeksi päivitetty";
+
+/* Route View window headers - Common */
+"System Name" = "Järjestelmän nimi";
+"Distance" = "Etäisyys";
+"Distance To Arrival" = "Etäisyys saapumiseen";
+"Jumps" = "Hypyt";
+"Fuel Left" = "Jäljellä oleva polttoaine";
+"Fuel Used" = "Käytetty polttoaine";
+"Refuel" = "Tankkaa";
+"Neutron Star" = "Neutronitähti";
+
+/* Route View window headers - Fleet Carrier */
+"Tritium in tank" = "Tritiumia säiliössä";
+"Tritium in market" = "Tritiumia markkinoilla";
+"Icy Ring" = "Jäärengas";
+"Pristine" = "Koskematon";
+"Restock Tritium" = "Täydennä tritiumia";
+
+/* Route View window headers - Road to Riches */
+"Body Name" = "Kappaleen nimi";
+"Body Subtype" = "Kappaleen alatyyppi";
+"Is Terraformable" = "On terraformoitavissa";
+"Estimated Scan Value" = "Arvioitu skannausarvo";
+"Estimated Mapping Value" = "Arvioitu kartoitustarvo";
+
+/* GalaxyGPS.py: Label for fuel used in route */
+"Fuel Used" = "Käytetty polttoaine";
+
+/* GalaxyGPS.py: Label for fuel remaining in route */
+"Fuel Remaining" = "Jäljellä oleva polttoaine";
+
+/* GalaxyGPS.py: Label for number of jumps to waypoint */
+"Number of Jumps" = "Hyppyjen määrä";
+
+/* GalaxyGPS.py: Urgent warning to restock tritium */
+"Restock Tritium Now" = "Täydennä tritiumia nyt";
+
+/* GalaxyGPS.py: Warning when destination system is missing in route planner */
+"Please provide a destination system." = "Anna kohdejärjestelmä.";
+
+/* GalaxyGPS.py: Error message when route plotting fails */
+"Error while trying to plot a route, please try again." = "Virhe reitin piirtämisessä, yritä uudelleen.";
+
+/* message_dialog.py: Yes button in confirmation dialogs */
+"Yes" = "Kyllä";
+
+/* message_dialog.py: No button in confirmation dialogs */
+"No" = "Ei";
+
+/* message_dialog.py: OK button in dialogs */
+"OK" = "OK";
+
+/* message_dialog.py: Cancel button in dialogs - already defined in GalaxyGPS.py but also used here */
+/* "Cancel" = "Peruuta"; */
+
+/* windows.py: Cargo Details window title */
+"Cargo Details" = "Rahtitiedot";
+
+/* windows.py: Message when cargo manager not available */
+"Cargo manager not available." = "Rahtinhallinta ei ole saatavilla.";
+
+/* windows.py: Message when no cargo data available for carrier */
+"No cargo data available for" = "Ei rahtitietoja saatavilla";
+
+/* windows.py: Cargo window column headers */
+"Cargo" = "Rahti";
+"Quantity" = "Määrä";
+"Value" = "Arvo";
+
+/* windows.py: Ships Details window title */
+"Ships Details" = "Alusten tiedot";
+
+/* windows.py: Message when ships manager not available */
+"Ships manager not available." = "Alusten hallinta ei ole saatavilla.";
+
+/* windows.py: Message when no ships data available for carrier */
+"No ships data available for" = "Ei alustietoja saatavilla";
+
+/* windows.py: Ships window column headers */
+"Ship" = "Alus";
+"Ship Name" = "Aluksen nimi";
+/* "Last Updated" = "Viimeksi päivitetty"; */ /* Already defined in Fleet Carrier headers */

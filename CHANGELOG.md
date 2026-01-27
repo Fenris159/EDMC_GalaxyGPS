@@ -1,10 +1,93 @@
-# EDMC_GalaxyGPS Change Log
+<!-- markdownlint-disable MD024 -->
+# EDMC_GalaxyGPS Changelog
 
 All notable changes to this project will be documented in this file.
 
 ## Version Reset Notice
 
 With the rename from SpanshRouter to GalaxyGPS and the significant code evolution, version numbering has been reset to start fresh at 1.0.0. The version history from SpanshRouter (3.4.2 and earlier) is preserved below for reference, but all future versions will follow the new numbering scheme starting from 1.0.0.
+
+---
+
+## 1.5.0 (Major Release - Multi-Language Support)
+
+### Major Features
+
+- **🌍 Comprehensive Multi-Language Support**: Added full localization support for 20+ languages!
+  - **European Languages**: Czech, Dutch, English, Finnish, French, German, Hungarian, Italian, Latvian, Polish, Russian, Slovenian, Spanish, Swedish, Ukrainian
+  - **Asian Languages**: Chinese (Simplified), Japanese, Korean
+  - **Portuguese Variants**: Portuguese (Brazil), Portuguese (Portugal)
+  - **Serbian Variants**: Serbian (Latin), Serbian (Latin, Bosnia and Herzegovina)
+  - All UI elements, buttons, labels, messages, and window titles are fully localized
+  - Automatic language detection based on EDMC language setting
+  - Dynamic UI refresh when language changes in EDMC settings
+  - Complete translation files for all supported languages in `L10n/` directory
+
+- **🚢 Enhanced Fleet Carrier Management**:
+  - **Cargo Details Window**: New window displaying detailed cargo manifest for fleet carriers
+    - Shows cargo item names (localized), quantities, and values
+    - Accessible via "Cargo" button in "View All Carriers" window
+    - Automatic column sizing and proper data formatting
+  - **Ships Details Window**: New window displaying all ships stored on fleet carriers
+    - Shows ship names and last updated timestamps
+    - Accessible via "Ships" button in "View All Carriers" window
+    - Proper handling of missing ships data
+  - **Stored Modules Details Window**: New window displaying stored modules on fleet carriers
+    - Tree view by category; localized module names, quantities, buy prices, engineered count, and total value
+    - Accessible via "Modules" button in "View All Carriers" window
+    - Data from `StoredModulesManager` and `fleet_carrier_modules.csv`
+
+### Localization System
+
+- **Translation Infrastructure**: Complete localization system using EDMC's `l10n` module
+  - Translation template file (`en.template`) with all translatable strings
+  - Individual translation files for each supported language
+  - Proper handling of special characters and placeholders
+  - Support for `{CR}` (carriage return) and `{ERROR}` placeholders in error messages
+
+- **Dynamic UI Updates**: All UI elements automatically refresh when language changes
+  - Buttons, labels, and placeholders update in real-time
+  - Window titles and column headers update when windows are opened
+  - Message dialogs use current language setting
+  - Route view windows refresh with new language on next waypoint change
+
+### UI/UX Improvements
+
+- **Improved Window Management**: Enhanced window positioning and state management
+  - Window positions are saved and restored between sessions
+  - Better handling of window resizing and positioning
+  - Improved visual consistency across all windows
+
+- **Better Data Presentation**: Enhanced formatting and display of carrier information
+  - Improved handling of missing data indicators
+  - Better visual alignment in detail windows
+  - Enhanced readability of cargo, ships, and modules information
+
+### Technical Improvements
+
+- **Code Organization**: Better separation of concerns with new manager classes
+  - `CargoDetailsManager`: Handles cargo data storage and retrieval
+  - `StoredShipsManager`: Handles ships data storage and retrieval
+  - `StoredModulesManager`: Handles stored modules data for the Modules Details window
+  - Improved error handling and data validation
+
+- **Translation File Management**: Organized translation files in `L10n/` directory
+  - Template file for reference (`en.template`)
+  - Active English translations (`en.strings`)
+  - Individual language files following EDMC naming conventions
+  - Proper file structure for easy maintenance and updates
+
+### Documentation
+
+- **Documentation Reorganization**: Moved reference docs into `Documentation/`
+  - `API_DOCUMENTATION.md`, `API_QUICK_REFERENCE.md`, `API_SUMMARY.md`, `INDEX_REFERENCE.md`, `TRANSLATION_VERIFICATION.md`, `CACHE_MODULES_README.md` now live in `Documentation/`
+  - Example and doc references updated to `Documentation/...`
+- **README and User Docs**: README reorganized (features/benefits first, installation and technical content later); expanded to describe Modules Details, cargo/ships windows, multi-language support, and the four CSV cache files; cache docs use generic paths (e.g. `%LOCALAPPDATA%` / `~/.local/share/...`) instead of user-specific paths
+
+### Requirements
+
+- **EDMC Language Support**: Plugin automatically uses EDMC's language setting
+- **Translation Files**: All translation files included in release (no additional downloads needed)
 
 ---
 
@@ -379,4 +462,3 @@ With the rename from SpanshRouter to GalaxyGPS and the significant code evolutio
 ## 1.0.0
 
 - Initial release
-

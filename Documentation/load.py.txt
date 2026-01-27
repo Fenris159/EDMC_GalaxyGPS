@@ -1,0 +1,295 @@
+"""
+GalaxyGPS API Example Plugin
+
+This example plugin demonstrates how to use the GalaxyGPS Public API
+to access route planning data, fleet carrier information, and player state.
+
+Installation:
+1. Copy this entire folder to your EDMC plugins directory
+2. Restart EDMC
+3. The plugin will display route and carrier information in the main window
+
+API Documentation: See Documentation/API_DOCUMENTATION.md in the GalaxyGPS plugin folder
+"""
+
+import logging
+import tkinter as tk
+from typing import Optional
+
+from config import appname  # type: ignore
+import myNotebook as nb  # type: ignore
+from theme import theme  # type: ignore
+
+# Plugin metadata
+__version__ = "1.0.0"
+plugin_name = "GalaxyGPS API Example"
+
+# Try to import GalaxyGPS API
+try:
+    import GalaxyGPS.api as galaxygps_api
+    GALAXYGPS_AVAILABLE = True
+except ImportError:
+    GALAXYGPS_AVAILABLE = False
+    galaxygps_api = None
+
+logger = logging.getLogger(f'{appname}.{plugin_name}')
+
+# UI elements
+frame: Optional[tk.Frame] = None
+status_label: Optional[tk.Label] = None
+route_label: Optional[tk.Label] = None
+carrier_label: Optional[tk.Label] = None
+
+
+def plugin_start3(plugin_dir):
+    """
+    Plugin initialization.
+    
+    Args:
+        plugin_dir: Path to the plugin directory
+        
+    Returns:
+        Plugin name to display in EDMC
+    """
+    if GALAXYGPS_AVAILABLE:
+        logger.info(f"GalaxyGPS API available: v{galaxygps_api.get_version()}")
+        api_info = galaxygps_api.get_api_info()
+        logger.info(f"Plugin version: {api_info['plugin_version']}")
+    else:
+        logger.warning("GalaxyGPS API not available - plugin not installed?")
+    
+    return plugin_name
+
+
+def plugin_app(parent):
+    """
+    Create the plugin UI.
+    
+    Args:
+        parent: Parent frame for UI elements
+        
+    Returns:
+        Frame containing plugin UI
+    """
+    global frame, status_label, route_label, carrier_label
+    
+    # Create main frame
+    frame = tk.Frame(parent)
+    frame.columnconfigure(0, weight=1)
+    
+    # Title label
+    title_label = tk.Label(frame, text="GalaxyGPS API Example")
+    title_label.grid(row=0, column=0, sticky=tk.W)
+    theme.update(title_label)
+    
+    # Status label
+    status_label = tk.Label(frame, text="Checking API...")
+    status_label.grid(row=1, column=0, sticky=tk.W)
+    theme.update(status_label)
+    
+    # Route info label
+    route_label = tk.Label(frame, text="Route: No data")
+    route_label.grid(row=2, column=0, sticky=tk.W)
+    theme.update(route_label)
+    
+    # Carrier info label
+    carrier_label = tk.Label(frame, text="Carrier: No data")
+    carrier_label.grid(row=3, column=0, sticky=tk.W)
+    theme.update(carrier_label)
+    
+    # Initial update
+    update_display()
+    
+    return frame
+
+
+def update_display():
+    """Update the display with current API data."""
+    if not GALAXYGPS_AVAILABLE or not galaxygps_api:
+        if status_label:
+            status_label.config(text="Status: GalaxyGPS not installed")
+        return
+    
+    if not galaxygps_api.is_available():
+        if status_label:
+            status_label.config(text="Status: GalaxyGPS not ready")
+        return
+    
+    # Update status
+    if status_label:
+        api_version = galaxygps_api.get_version()
+        status_label.config(text=f"Status: API v{api_version} ready")
+    
+    # Update route info
+    if route_label:
+        route_info = galaxygps_api.get_route_info()
+        if route_info and route_info['is_loaded']:
+            route_text = (
+                f"Route: {route_info['next_stop']} "
+                f"({route_info['jumps_left']} jumps, "
+                f"{route_info['offset']}/{route_info['total_waypoints']})"
+            )
+            route_label.config(text=route_text)
+        else:
+            route_label.config(text="Route: No route loaded")
+    
+    # Update carrier info
+    if carrier_label:
+        carrier = galaxygps_api.get_selected_fleet_carrier()
+        if carrier:
+            carrier_text = (
+                f"Carrier: {carrier['callsign']} "
+                f"({carrier['current_system']}, "
+                f"{carrier['fuel']} tons fuel)"
+            )
+            carrier_label.config(text=carrier_text)
+        else:
+            carriers = galaxygps_api.get_fleet_carriers()
+            if carriers:
+                carrier_label.config(text=f"Carrier: {len(carriers)} tracked")
+            else:
+                carrier_label.config(text="Carrier: No data")
+
+
+def journal_entry(cmdr, is_beta, system, station, entry, state):
+    """
+    Called when a journal entry is received.
+    
+    This is a good place to update the display when the player's state changes.
+    
+    Args:
+        cmdr: Commander name
+        is_beta: Whether playing in beta
+        system: Current system name
+        station: Current station name (or None)
+        entry: Journal entry dictionary
+        state: Current game state
+    """
+    if not GALAXYGPS_AVAILABLE or not galaxygps_api.is_available():
+        return
+    
+    event = entry.get('event', '')
+    
+    # Update display on relevant events
+    if event in ['FSDJump', 'Location', 'Docked', 'Undocked', 'CarrierJump']:
+        update_display()
+        
+        # Log some interesting information
+        if event == 'FSDJump':
+            route_progress = galaxygps_api.get_route_progress()
+            if route_progress:
+                percent = route_progress['percent_complete']
+                logger.info(f"Route progress: {percent:.1f}%")
+        
+        elif event == 'CarrierJump':
+            # Check if any tracked carriers jumped
+            carriers = galaxygps_api.get_fleet_carriers()
+            if carriers:
+                jumped_system = entry.get('StarSystem', '')
+                for carrier in carriers:
+                    if carrier['current_system'] == jumped_system:
+                        logger.info(
+                            f"Carrier {carrier['callsign']} "
+                            f"jumped to {jumped_system}"
+                        )
+
+
+def prefs_changed(cmdr, is_beta):
+    """
+    Called when EDMC preferences are changed.
+    
+    Args:
+        cmdr: Commander name
+        is_beta: Whether playing in beta
+    """
+    # Update theme
+    if frame:
+        for child in frame.winfo_children():
+            theme.update(child)
+    
+    # Update display
+    update_display()
+
+
+def plugin_stop():
+    """
+    Called when the plugin is being stopped.
+    """
+    logger.info("GalaxyGPS API Example plugin stopping")
+
+
+# Example: Advanced API usage functions
+def example_route_analysis():
+    """
+    Example function showing advanced route analysis.
+    
+    This demonstrates how to use multiple API functions together
+    to analyze a route.
+    """
+    if not GALAXYGPS_AVAILABLE or not galaxygps_api.is_available():
+        return
+    
+    # Get route information
+    route_info = galaxygps_api.get_route_info()
+    if not route_info or not route_info['is_loaded']:
+        logger.info("No route loaded")
+        return
+    
+    # Get all waypoints
+    waypoints = galaxygps_api.get_route_waypoints()
+    if not waypoints:
+        return
+    
+    # Get progress
+    progress = galaxygps_api.get_route_progress()
+    if not progress:
+        return
+    
+    # Analyze route
+    logger.info(f"Route Analysis:")
+    logger.info(f"  Type: {route_info['route_type']}")
+    logger.info(f"  Total waypoints: {len(waypoints)}")
+    logger.info(f"  Progress: {progress['percent_complete']:.1f}%")
+    logger.info(f"  Current: {progress['current_waypoint']}")
+    logger.info(f"  Next: {progress['next_waypoint']}")
+    logger.info(f"  Remaining: {progress['waypoints_remaining']} waypoints")
+    
+    if route_info['route_type'] == 'neutron':
+        logger.info(f"  Jumps left: {route_info['jumps_left']}")
+    
+    if route_info['fuel_remaining'] > 0:
+        logger.info(f"  Fuel remaining: {route_info['fuel_remaining']:.2f}t")
+
+
+def example_carrier_analysis():
+    """
+    Example function showing fleet carrier analysis.
+    
+    This demonstrates how to analyze all tracked fleet carriers.
+    """
+    if not GALAXYGPS_AVAILABLE or not galaxygps_api.is_available():
+        return
+    
+    # Get all carriers
+    carriers = galaxygps_api.get_fleet_carriers()
+    if not carriers:
+        logger.info("No fleet carriers tracked")
+        return
+    
+    logger.info(f"Fleet Carrier Analysis ({len(carriers)} carriers):")
+    
+    for carrier in carriers:
+        logger.info(f"\n  {carrier['callsign']}: {carrier['name']}")
+        logger.info(f"    Location: {carrier['current_system']}")
+        logger.info(f"    Fuel: {carrier['fuel']} tons")
+        logger.info(f"    Balance: {carrier['balance']:,} CR")
+        
+        # Get detailed cargo
+        cargo = galaxygps_api.get_fleet_carrier_cargo(carrier['callsign'])
+        if cargo:
+            logger.info(f"    Cargo: {len(cargo)} types")
+        
+        # Get stored ships
+        ships = galaxygps_api.get_fleet_carrier_ships(carrier['callsign'])
+        if ships:
+            logger.info(f"    Ships: {len(ships)} stored")

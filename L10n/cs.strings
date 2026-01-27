@@ -1,0 +1,285 @@
+/* GalaxyGPS Plugin Czech Translation */
+
+/* load.py: Update notification dialog */
+"New GalaxyGPS update available!" = "K dispozici je nová aktualizace GalaxyGPS!";
+
+/* load.py: Update installation instructions */
+"If you choose to install it, you will have to restart EDMC for it to take effect." = "Pokud se rozhodnete ji nainstalovat, budete muset restartovat EDMC, aby se projevila.";
+
+/* load.py: Prompt to install update */
+"Install?" = "Nainstalovat?";
+
+/* load.py: Confirmation message after accepting update */
+"The update will be installed as soon as you quit EDMC." = "Aktualizace bude nainstalována, jakmile ukončíte EDMC.";
+
+/* load.py: Error dialog title */
+"GalaxyGPS Error" = "Chyba GalaxyGPS";
+
+/* load.py: Error message when plugin fails to initialize */
+"Failed to initialize plugin:{CR}{ERROR}{CR}{CR}Check EDMC log for details." = "Nepodařilo se inicializovat plugin:{CR}{ERROR}{CR}{CR}Podrobnosti najdete v protokolu EDMC.";
+
+/* GalaxyGPS.py: Button to view all fleet carriers */
+"View All" = "Zobrazit vše";
+
+/* GalaxyGPS.py: Button to open Inara website */
+"Inara" = "Inara";
+
+/* GalaxyGPS.py: Button to find tritium on Inara */
+"Find Trit" = "Najít tritium";
+
+/* GalaxyGPS.py: Button to import route from CSV file */
+"Import file" = "Importovat soubor";
+
+/* GalaxyGPS.py: Button to view current route */
+"View Route" = "Zobrazit trasu";
+
+/* GalaxyGPS.py: Button to show route plotting GUI */
+"Plot route" = "Naplánovat trasu";
+
+/* GalaxyGPS.py: Button to calculate/compute route */
+"Calculate" = "Vypočítat";
+
+/* GalaxyGPS.py: Button to cancel route plotting */
+"Cancel" = "Zrušit";
+
+/* GalaxyGPS.py: Button to clear current route */
+"Clear route" = "Vymazat trasu";
+
+/* GalaxyGPS.py: Button text during route calculation */
+"Computing..." = "Počítám...";
+
+/* GalaxyGPS.py: Label for fleet carrier selector */
+"Fleet Carrier:" = "Flotilová loď:";
+
+/* GalaxyGPS.py: Label for fleet carrier system display */
+"System:" = "Systém:";
+
+/* GalaxyGPS.py: Label for icy rings status */
+"Icy Rings" = "Ledové prstence";
+
+/* GalaxyGPS.py: Label for pristine ring status */
+"Pristine" = "Neporušené";
+
+/* GalaxyGPS.py: Label for fleet carrier balance */
+"Balance:" = "Zůstatek:";
+
+/* GalaxyGPS.py: Label for neutron star supercharge toggle */
+"Supercharge" = "Supernabití";
+
+/* GalaxyGPS.py: Placeholder text for source system input */
+"Source System" = "Výchozí systém";
+
+/* GalaxyGPS.py: Placeholder text for destination system input */
+"Destination System" = "Cílový systém";
+
+/* GalaxyGPS.py: Placeholder text for jump range input */
+"Range (LY)" = "Dosah (LY)";
+
+/* GalaxyGPS.py: Label for efficiency slider */
+"Efficiency (%)" = "Efektivita (%)";
+
+/* GalaxyGPS.py: Confirmation dialog for clearing route */
+"Are you sure you want to clear the current route?" = "Opravdu chcete vymazat aktuální trasu?";
+
+/* GalaxyGPS.py: Warning when no fleet carrier selected */
+"No Carrier Selected" = "Nevybrána loď";
+
+/* GalaxyGPS.py: Message when no fleet carrier selected */
+"Please select a fleet carrier first." = "Nejprve prosím vyberte flotilovou loď.";
+
+/* GalaxyGPS.py: Error dialog title */
+"Error" = "Chyba";
+
+/* GalaxyGPS.py: Error opening Inara website */
+"Failed to open Inara page." = "Nepodařilo se otevřít stránku Inara.";
+
+/* GalaxyGPS.py: Warning when carrier system unknown */
+"No System" = "Žádný systém";
+
+/* GalaxyGPS.py: Message when carrier system unknown */
+"Could not determine carrier's current system." = "Nepodařilo se určit aktuální systém lodi.";
+
+/* GalaxyGPS.py: Error opening Inara tritium search */
+"Failed to open Inara Tritium search." = "Nepodařilo se otevřít vyhledávání tritia na Inara.";
+
+/* GalaxyGPS.py: Warning when no carrier data available */
+"No Carrier Data" = "Žádná data lodi";
+
+/* GalaxyGPS.py: Message when no carrier data available */
+"No fleet carrier data available." = "Nejsou k dispozici žádná data flotilové lodi.";
+
+/* GalaxyGPS.py: Warning when carrier system location unknown */
+"Could not determine carrier's current system location." = "Nepodařilo se určit aktuální polohu systému lodi.";
+
+/* GalaxyGPS.py: Warning when no carrier selected */
+"No Carrier" = "Žádná loď";
+
+/* GalaxyGPS.py: Message when no carrier selected */
+"No fleet carrier selected." = "Nevybrána žádná flotilová loď.";
+
+/* windows.py: Window title for fleet carrier list */
+"Fleet Carriers" = "Flotilové lodě";
+
+/* windows.py: Info message when no route is loaded */
+"No route is currently loaded." = "Aktuálně není načtena žádná trasu.";
+
+/* windows.py: Warning dialog title for missing route file */
+"Route File Not Found" = "Soubor trasy nenalezen";
+
+/* windows.py: Warning message about missing route file */
+"Route CSV file not found. Please import the route again." = "Soubor CSV trasy nenalezen. Prosím importujte trasu znovu.";
+
+/* windows.py: Info when no route data to display */
+"No route data to display." = "Žádná data trasy k zobrazení.";
+
+/* windows.py: Error reading route CSV file */
+"Failed to read route CSV file." = "Nepodařilo se přečíst soubor CSV trasy.";
+
+/* windows.py: Error displaying carrier details */
+"Failed to display carrier details." = "Nepodařilo se zobrazit detaily lodi.";
+
+/* windows.py: Error displaying route */
+"Failed to display route." = "Nepodařilo se zobrazit trasu.";
+
+/* windows.py: Error opening cargo details */
+"Failed to open cargo details: {ERROR}" = "Nepodařilo se otevřít detaily nákladu: {ERROR}";
+
+/* windows.py: Error opening ships details */
+"Failed to open ships details: {ERROR}" = "Nepodařilo se otevřít detaily lodí: {ERROR}";
+
+/* GalaxyGPS.py: Label prefix for next waypoint in route */
+"Next waypoint: " = "Další waypoint: ";
+
+/* GalaxyGPS.py: Label for estimated jumps remaining */
+"Estimated jumps left: " = "Odhadovaných skoků zbývá: ";
+
+/* GalaxyGPS.py: Label for bodies to scan at current system */
+"Bodies to scan at: " = "Tělesa ke skenování v: ";
+
+/* GalaxyGPS.py: Warning label when tritium restock needed */
+"Warning: Restock Tritium" = "Varování: Doplnit tritium";
+
+/* GalaxyGPS.py: Reminder label to refuel ship */
+"Time to scoop some fuel" = "Čas nabrat palivo";
+
+/* GalaxyGPS.py: Label for next waypoint jumps count */
+"Next waypoint jumps" = "Skoky k dalšímu waypointu";
+
+/* windows.py: Window title for fleet carrier details */
+"Fleet Carrier Details" = "Detaily flotilové lodi";
+
+/* windows.py: Window title for route view */
+"Route View" = "Zobrazení trasy";
+
+/* GalaxyGPS.py: Message shown at start of route */
+"Start of the journey" = "Začátek cesty";
+
+/* GalaxyGPS.py: Label for remaining jumps after current waypoint */
+"Remaining jumps afterwards" = "Zbývající skoky poté";
+
+/* GalaxyGPS.py: Message shown when route is completed */
+"Finished" = "Dokončeno";
+
+/* GalaxyGPS.py: Label for next jump distance in LY */
+"Next jump LY" = "Další skok LY";
+
+/* GalaxyGPS.py: Label for distance remaining to destination */
+"Distance Remaining" = "Zbývající vzdálenost";
+
+/* Fleet Carrier window headers */
+"Select" = "Vybrat";
+"Callsign" = "Volací znak";
+"Name" = "Název";
+"EDSM" = "EDSM";
+"System" = "Systém";
+"Tritium" = "Tritium";
+"Balance" = "Zůstatek";
+"Cargo" = "Náklad";
+"Shipyard" = "Loděnice";
+"State" = "Stav";
+"Theme" = "Téma";
+"Docking Access" = "Přístup k dokování";
+"Notorious Access" = "Přístup pro notoricky známé";
+"Last Updated" = "Naposledy aktualizováno";
+
+/* Route View window headers - Common */
+"System Name" = "Název systému";
+"Distance" = "Vzdálenost";
+"Distance To Arrival" = "Vzdálenost do příjezdu";
+"Jumps" = "Skoky";
+"Fuel Left" = "Zbývající palivo";
+"Fuel Used" = "Spotřebované palivo";
+"Refuel" = "Doplnit palivo";
+"Neutron Star" = "Neutronová hvězda";
+
+/* Route View window headers - Fleet Carrier */
+"Tritium in tank" = "Tritium v nádrži";
+"Tritium in market" = "Tritium na trhu";
+"Icy Ring" = "Ledový prstenec";
+"Pristine" = "Neporušené";
+"Restock Tritium" = "Doplnit tritium";
+
+/* Route View window headers - Road to Riches */
+"Body Name" = "Název tělesa";
+"Body Subtype" = "Podtyp tělesa";
+"Is Terraformable" = "Je terraformovatelné";
+"Estimated Scan Value" = "Odhadovaná hodnota skenování";
+"Estimated Mapping Value" = "Odhadovaná hodnota mapování";
+
+/* GalaxyGPS.py: Label for fuel used in route */
+"Fuel Used" = "Spotřebované palivo";
+
+/* GalaxyGPS.py: Label for fuel remaining in route */
+"Fuel Remaining" = "Zbývající palivo";
+
+/* GalaxyGPS.py: Label for number of jumps to waypoint */
+"Number of Jumps" = "Počet skoků";
+
+/* GalaxyGPS.py: Urgent warning to restock tritium */
+"Restock Tritium Now" = "Doplnit tritium nyní";
+
+/* GalaxyGPS.py: Warning when destination system is missing in route planner */
+"Please provide a destination system." = "Prosím zadejte cílový systém.";
+
+/* GalaxyGPS.py: Error message when route plotting fails */
+"Error while trying to plot a route, please try again." = "Chyba při pokusu o naplánování trasy, prosím zkuste to znovu.";
+
+/* message_dialog.py: Yes button in confirmation dialogs */
+"Yes" = "Ano";
+
+/* message_dialog.py: No button in confirmation dialogs */
+"No" = "Ne";
+
+/* message_dialog.py: OK button in dialogs */
+"OK" = "OK";
+
+/* message_dialog.py: Cancel button in dialogs - already defined in GalaxyGPS.py but also used here */
+/* "Cancel" = "Zrušit"; */
+
+/* windows.py: Cargo Details window title */
+"Cargo Details" = "Detaily nákladu";
+
+/* windows.py: Message when cargo manager not available */
+"Cargo manager not available." = "Správce nákladu není k dispozici.";
+
+/* windows.py: Message when no cargo data available for carrier */
+"No cargo data available for" = "Žádná data nákladu k dispozici pro";
+
+/* windows.py: Cargo window column headers */
+"Cargo" = "Náklad";
+"Quantity" = "Množství";
+"Value" = "Hodnota";
+
+/* windows.py: Ships Details window title */
+"Ships Details" = "Detaily lodí";
+
+/* windows.py: Message when ships manager not available */
+"Ships manager not available." = "Správce lodí není k dispozici.";
+
+/* windows.py: Message when no ships data available for carrier */
+"No ships data available for" = "Žádná data lodí k dispozici pro";
+
+/* windows.py: Ships window column headers */
+"Ship" = "Loď";
+"Ship Name" = "Název lodi";
+/* "Last Updated" = "Naposledy aktualizováno"; */ /* Already defined in Fleet Carrier headers */

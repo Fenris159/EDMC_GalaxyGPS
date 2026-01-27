@@ -1,0 +1,285 @@
+/* GalaxyGPS Plugin Swedish Translation */
+
+/* load.py: Update notification dialog */
+"New GalaxyGPS update available!" = "Ny GalaxyGPS-uppdatering tillgänglig!";
+
+/* load.py: Update installation instructions */
+"If you choose to install it, you will have to restart EDMC for it to take effect." = "Om du väljer att installera den måste du starta om EDMC för att den ska träda i kraft.";
+
+/* load.py: Prompt to install update */
+"Install?" = "Installera?";
+
+/* load.py: Confirmation message after accepting update */
+"The update will be installed as soon as you quit EDMC." = "Uppdateringen kommer att installeras så snart du avslutar EDMC.";
+
+/* load.py: Error dialog title */
+"GalaxyGPS Error" = "GalaxyGPS-fel";
+
+/* load.py: Error message when plugin fails to initialize */
+"Failed to initialize plugin:{CR}{ERROR}{CR}{CR}Check EDMC log for details." = "Kunde inte initiera plugin:{CR}{ERROR}{CR}{CR}Kontrollera EDMC-loggen för detaljer.";
+
+/* GalaxyGPS.py: Button to view all fleet carriers */
+"View All" = "Visa alla";
+
+/* GalaxyGPS.py: Button to open Inara website */
+"Inara" = "Inara";
+
+/* GalaxyGPS.py: Button to find tritium on Inara */
+"Find Trit" = "Hitta tritium";
+
+/* GalaxyGPS.py: Button to import route from CSV file */
+"Import file" = "Importera fil";
+
+/* GalaxyGPS.py: Button to view current route */
+"View Route" = "Visa rutt";
+
+/* GalaxyGPS.py: Button to show route plotting GUI */
+"Plot route" = "Rita rutt";
+
+/* GalaxyGPS.py: Button to calculate/compute route */
+"Calculate" = "Beräkna";
+
+/* GalaxyGPS.py: Button to cancel route plotting */
+"Cancel" = "Avbryt";
+
+/* GalaxyGPS.py: Button to clear current route */
+"Clear route" = "Rensa rutt";
+
+/* GalaxyGPS.py: Button text during route calculation */
+"Computing..." = "Beräknar...";
+
+/* GalaxyGPS.py: Label for fleet carrier selector */
+"Fleet Carrier:" = "Flottbärare:";
+
+/* GalaxyGPS.py: Label for fleet carrier system display */
+"System:" = "System:";
+
+/* GalaxyGPS.py: Label for icy rings status */
+"Icy Rings" = "Istappar";
+
+/* GalaxyGPS.py: Label for pristine ring status */
+"Pristine" = "Orörd";
+
+/* GalaxyGPS.py: Label for fleet carrier balance */
+"Balance:" = "Saldo:";
+
+/* GalaxyGPS.py: Label for neutron star supercharge toggle */
+"Supercharge" = "Ladda";
+
+/* GalaxyGPS.py: Placeholder text for source system input */
+"Source System" = "Källsystem";
+
+/* GalaxyGPS.py: Placeholder text for destination system input */
+"Destination System" = "Destinationssystem";
+
+/* GalaxyGPS.py: Placeholder text for jump range input */
+"Range (LY)" = "Räckvidd (LY)";
+
+/* GalaxyGPS.py: Label for efficiency slider */
+"Efficiency (%)" = "Effektivitet (%)";
+
+/* GalaxyGPS.py: Confirmation dialog for clearing route */
+"Are you sure you want to clear the current route?" = "Är du säker på att du vill rensa den nuvarande rutten?";
+
+/* GalaxyGPS.py: Warning when no fleet carrier selected */
+"No Carrier Selected" = "Ingen bärare vald";
+
+/* GalaxyGPS.py: Message when no fleet carrier selected */
+"Please select a fleet carrier first." = "Välj först en flottbärare.";
+
+/* GalaxyGPS.py: Error dialog title */
+"Error" = "Fel";
+
+/* GalaxyGPS.py: Error opening Inara website */
+"Failed to open Inara page." = "Kunde inte öppna Inara-sidan.";
+
+/* GalaxyGPS.py: Warning when carrier system unknown */
+"No System" = "Inget system";
+
+/* GalaxyGPS.py: Message when carrier system unknown */
+"Could not determine carrier's current system." = "Kunde inte fastställa bärarens nuvarande system.";
+
+/* GalaxyGPS.py: Error opening Inara tritium search */
+"Failed to open Inara Tritium search." = "Kunde inte öppna Inara-tritiumsökning.";
+
+/* GalaxyGPS.py: Warning when no carrier data available */
+"No Carrier Data" = "Inga bärardata";
+
+/* GalaxyGPS.py: Message when no carrier data available */
+"No fleet carrier data available." = "Inga flottbärardata tillgängliga.";
+
+/* GalaxyGPS.py: Warning when carrier system location unknown */
+"Could not determine carrier's current system location." = "Kunde inte fastställa bärarens nuvarande systemplats.";
+
+/* GalaxyGPS.py: Warning when no carrier selected */
+"No Carrier" = "Ingen bärare";
+
+/* GalaxyGPS.py: Message when no carrier selected */
+"No fleet carrier selected." = "Ingen flottbärare vald.";
+
+/* windows.py: Window title for fleet carrier list */
+"Fleet Carriers" = "Flottbärare";
+
+/* windows.py: Info message when no route is loaded */
+"No route is currently loaded." = "Ingen rutt är för närvarande laddad.";
+
+/* windows.py: Warning dialog title for missing route file */
+"Route File Not Found" = "Ruttfil hittades inte";
+
+/* windows.py: Warning message about missing route file */
+"Route CSV file not found. Please import the route again." = "Rutt CSV-fil hittades inte. Importera rutten igen.";
+
+/* windows.py: Info when no route data to display */
+"No route data to display." = "Inga ruttdata att visa.";
+
+/* windows.py: Error reading route CSV file */
+"Failed to read route CSV file." = "Kunde inte läsa rutt CSV-filen.";
+
+/* windows.py: Error displaying carrier details */
+"Failed to display carrier details." = "Kunde inte visa bärardetaljer.";
+
+/* windows.py: Error displaying route */
+"Failed to display route." = "Kunde inte visa rutten.";
+
+/* windows.py: Error opening cargo details */
+"Failed to open cargo details: {ERROR}" = "Kunde inte öppna lastdetaljer: {ERROR}";
+
+/* windows.py: Error opening ships details */
+"Failed to open ships details: {ERROR}" = "Kunde inte öppna fartygsdetaljer: {ERROR}";
+
+/* GalaxyGPS.py: Label prefix for next waypoint in route */
+"Next waypoint: " = "Nästa waypoint: ";
+
+/* GalaxyGPS.py: Label for estimated jumps remaining */
+"Estimated jumps left: " = "Uppskattade hopp kvar: ";
+
+/* GalaxyGPS.py: Label for bodies to scan at current system */
+"Bodies to scan at: " = "Kroppar att skanna i: ";
+
+/* GalaxyGPS.py: Warning label when tritium restock needed */
+"Warning: Restock Tritium" = "Varning: Fyll på tritium";
+
+/* GalaxyGPS.py: Reminder label to refuel ship */
+"Time to scoop some fuel" = "Dags att samla bränsle";
+
+/* GalaxyGPS.py: Label for next waypoint jumps count */
+"Next waypoint jumps" = "Hopp till nästa waypoint";
+
+/* windows.py: Window title for fleet carrier details */
+"Fleet Carrier Details" = "Flottbärardetaljer";
+
+/* windows.py: Window title for route view */
+"Route View" = "Ruttvy";
+
+/* GalaxyGPS.py: Message shown at start of route */
+"Start of the journey" = "Resans början";
+
+/* GalaxyGPS.py: Label for remaining jumps after current waypoint */
+"Remaining jumps afterwards" = "Återstående hopp efteråt";
+
+/* GalaxyGPS.py: Message shown when route is completed */
+"Finished" = "Klar";
+
+/* GalaxyGPS.py: Label for next jump distance in LY */
+"Next jump LY" = "Nästa hopp LY";
+
+/* GalaxyGPS.py: Label for distance remaining to destination */
+"Distance Remaining" = "Återstående avstånd";
+
+/* Fleet Carrier window headers */
+"Select" = "Välj";
+"Callsign" = "Anropsnamn";
+"Name" = "Namn";
+"EDSM" = "EDSM";
+"System" = "System";
+"Tritium" = "Tritium";
+"Balance" = "Saldo";
+"Cargo" = "Last";
+"Shipyard" = "Varv";
+"State" = "Tillstånd";
+"Theme" = "Tema";
+"Docking Access" = "Dockningsåtkomst";
+"Notorious Access" = "Beryktad åtkomst";
+"Last Updated" = "Senast uppdaterad";
+
+/* Route View window headers - Common */
+"System Name" = "Systemnamn";
+"Distance" = "Avstånd";
+"Distance To Arrival" = "Avstånd till ankomst";
+"Jumps" = "Hopp";
+"Fuel Left" = "Bränsle kvar";
+"Fuel Used" = "Bränsle använt";
+"Refuel" = "Tanka";
+"Neutron Star" = "Neutronstjärna";
+
+/* Route View window headers - Fleet Carrier */
+"Tritium in tank" = "Tritium i tanken";
+"Tritium in market" = "Tritium på marknaden";
+"Icy Ring" = "Istapp";
+"Pristine" = "Orörd";
+"Restock Tritium" = "Fyll på tritium";
+
+/* Route View window headers - Road to Riches */
+"Body Name" = "Kroppsnamn";
+"Body Subtype" = "Kroppssubtyp";
+"Is Terraformable" = "Är terraformbar";
+"Estimated Scan Value" = "Uppskattat skanningsvärde";
+"Estimated Mapping Value" = "Uppskattat kartläggningsvärde";
+
+/* GalaxyGPS.py: Label for fuel used in route */
+"Fuel Used" = "Bränsle använt";
+
+/* GalaxyGPS.py: Label for fuel remaining in route */
+"Fuel Remaining" = "Bränsle kvar";
+
+/* GalaxyGPS.py: Label for number of jumps to waypoint */
+"Number of Jumps" = "Antal hopp";
+
+/* GalaxyGPS.py: Urgent warning to restock tritium */
+"Restock Tritium Now" = "Fyll på tritium nu";
+
+/* GalaxyGPS.py: Warning when destination system is missing in route planner */
+"Please provide a destination system." = "Ange ett destinationssystem.";
+
+/* GalaxyGPS.py: Error message when route plotting fails */
+"Error while trying to plot a route, please try again." = "Fel vid försök att rita en rutt, försök igen.";
+
+/* message_dialog.py: Yes button in confirmation dialogs */
+"Yes" = "Ja";
+
+/* message_dialog.py: No button in confirmation dialogs */
+"No" = "Nej";
+
+/* message_dialog.py: OK button in dialogs */
+"OK" = "OK";
+
+/* message_dialog.py: Cancel button in dialogs - already defined in GalaxyGPS.py but also used here */
+/* "Cancel" = "Avbryt"; */
+
+/* windows.py: Cargo Details window title */
+"Cargo Details" = "Lastdetaljer";
+
+/* windows.py: Message when cargo manager not available */
+"Cargo manager not available." = "Lastförvaltare inte tillgänglig.";
+
+/* windows.py: Message when no cargo data available for carrier */
+"No cargo data available for" = "Inga lastdata tillgängliga för";
+
+/* windows.py: Cargo window column headers */
+"Cargo" = "Last";
+"Quantity" = "Kvantitet";
+"Value" = "Värde";
+
+/* windows.py: Ships Details window title */
+"Ships Details" = "Fartygsdetaljer";
+
+/* windows.py: Message when ships manager not available */
+"Ships manager not available." = "Fartygsförvaltare inte tillgänglig.";
+
+/* windows.py: Message when no ships data available for carrier */
+"No ships data available for" = "Inga fartygsdata tillgängliga för";
+
+/* windows.py: Ships window column headers */
+"Ship" = "Fartyg";
+"Ship Name" = "Fartygsnamn";
+/* "Last Updated" = "Senast uppdaterad"; */ /* Already defined in Fleet Carrier headers */
