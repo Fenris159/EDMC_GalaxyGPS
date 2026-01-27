@@ -23,6 +23,7 @@ from config import appname, config  # type: ignore
 logger = logging.getLogger(f'{appname}.{plugin_name}')
 
 # Version for Plugin Browser / auto-updater (PLUGINS.md); single source: version.json
+# EDMC Plugin Registry requires __version__ as a string in Semantic Versioning format (Major.Minor.Patch).
 try:
     _version_path = os.path.join(_plugin_dir, 'version.json')
     with open(_version_path, 'r', encoding='utf-8') as _f:
@@ -33,6 +34,7 @@ try:
         __version__ = _v.strip('"\'') if _v else '0.0.0'
 except Exception:
     __version__ = '0.0.0'
+__version__ = str(__version__) if __version__ else '0.0.0'
 
 if not logger.hasHandlers():
     logger.setLevel(logging.INFO)
@@ -101,7 +103,7 @@ def plugin_start(plugin_dir):
     except Exception as e:
         logger.warning(f"Failed to register API instance: {e}")
     
-    return '!GalaxyGPS'  # Exclamation mark ensures this sorts first alphabetically
+    return 'GalaxyGPS'
 
 
 def plugin_stop():
