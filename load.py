@@ -9,6 +9,13 @@ import threading
 _plugin_dir = os.path.dirname(os.path.abspath(__file__))
 plugin_name = os.path.basename(_plugin_dir)
 
+# Ensure this plugin's directory is first on path so "GalaxyGPS" resolves to the
+# inner package (GalaxyGPS/GalaxyGPS/ and GalaxyGPS/ui/), not the plugin folder
+# when the folder is named "GalaxyGPS" (EDMC adds plugins dir first, so otherwise
+# GalaxyGPS.ui would be looked up as plugin_folder/ui/ and fail with ModuleNotFoundError).
+if _plugin_dir not in sys.path:
+    sys.path.insert(0, _plugin_dir)
+
 # Localization support - use file path as context (EDMC parses plugin name from path)
 import l10n
 import functools

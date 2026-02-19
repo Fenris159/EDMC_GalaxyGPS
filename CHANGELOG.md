@@ -9,6 +9,14 @@ With the rename from SpanshRouter to GalaxyGPS and the significant code evolutio
 
 ---
 
+## 1.5.1
+
+### Bug Fixes
+
+- **Fixed ModuleNotFoundError: No module named 'GalaxyGPS.ui'**: When the plugin folder is named "GalaxyGPS", Python resolved the package name to the plugin root instead of the inner GalaxyGPS package, so `GalaxyGPS.ui` was not found. The plugin directory is now inserted at the start of `sys.path` before any GalaxyGPS imports, so the inner package (and `GalaxyGPS.ui`) is always found regardless of plugin folder name.
+
+---
+
 ## 1.5.0 (Major Release - Multi-Language Support)
 
 ### Major Features
