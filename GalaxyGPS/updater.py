@@ -25,7 +25,9 @@ class SpanshUpdater():
         # GitHub repository configuration
         github_repo = "Fenris159/EDMC_GalaxyGPS"  # Format: "username/repository"
         
-        url = f'https://github.com/{github_repo}/releases/download/v{self.version}/{self.zip_name}'
+        # Release tag on GitHub is the version string without "v" (e.g. 1.5.1 not v1.5.1)
+        url = f'https://github.com/{github_repo}/releases/download/{self.version}/{self.zip_name}'
+        logger.info(f"GalaxyGPS update: fetching {url}")
 
         try:
             session = timeout_session.new_session()
@@ -33,11 +35,11 @@ class SpanshUpdater():
             r = session.get(url, timeout=60)
             if r.status_code == 200:
                 with open(self.zip_path, 'wb') as f:
-                    logger.info(f"Downloading GalaxyGPS to {self.zip_path}")
                     f.write(r.content)
+                logger.info(f"GalaxyGPS update: downloaded to {self.zip_path}")
                 self.zip_downloaded = True
             else:
-                logger.warning("Failed to fetch GalaxyGPS update. Status code: " + str(r.status_code))
+                logger.warning(f"GalaxyGPS update: download failed status={r.status_code} url={url}")
                 self.zip_downloaded = False
         except Exception:
             logger.warning('!! ' + traceback.format_exc(), exc_info=False)

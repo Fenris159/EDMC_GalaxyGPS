@@ -3408,30 +3408,24 @@ class GalaxyGPS():
             logger.warning('!! ' + traceback.format_exc(), exc_info=False)
 
     def check_for_update(self):
-        # Auto-updates enabled
-        # GitHub repository configuration
-        github_repo = "Fenris159/EDMC_GalaxyGPS"  # Format: "username/repository"
-        github_branch = "master"  # Your default branch name (master, main, etc.)
-        
+        # Use GitHub Releases API so we don't depend on branch name (master vs main)
+        github_repo = "Fenris159/EDMC_GalaxyGPS"
         self.cleanup_old_version()
-        version_url = f"https://raw.githubusercontent.com/{github_repo}/{github_branch}/version.json"
+        url = f"https://api.github.com/repos/{github_repo}/releases/latest"
         try:
             session = timeout_session.new_session()
             session.headers['User-Agent'] = user_agent + ' GalaxyGPS'
-            response = session.get(version_url, timeout=2)
+            response = session.get(url, timeout=10)
             if response.status_code == 200:
-                remote_version_content = response.text.strip()
-                try:
-                    remote_version = json.loads(remote_version_content)
-                except json.JSONDecodeError:
-                    # Fallback: if it's not valid JSON, treat as plain text (remove quotes if present)
-                    remote_version = remote_version_content.strip('"\'')
-                if self.plugin_version != remote_version:
+                data = response.json()
+                tag_name = data.get("tag_name") or ""
+                # Normalize: tag may be "1.5.1" or "v1.5.1"
+                remote_version = tag_name.lstrip("vV").strip()
+                if remote_version and self.plugin_version != remote_version:
                     self.update_available = True
                     self.spansh_updater = SpanshUpdater(remote_version, self.plugin_dir)
-
             else:
-                logger.warning(f"Could not query latest GalaxyGPS version, code: {str(response.status_code)}; text: {response.text}")
+                logger.warning(f"Could not query latest GalaxyGPS release, code: {response.status_code}; text: {response.text[:200]}")
         except Exception:
             logger.warning('!! ' + traceback.format_exc(), exc_info=False)
 

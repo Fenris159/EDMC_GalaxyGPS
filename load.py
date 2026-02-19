@@ -324,7 +324,12 @@ def ask_for_update():
                     if done:
                         # LANG: Shown after update install, before EDMC is closed
                         showinfo(parent_window, "GalaxyGPS", plugin_tl("Update installed. EDMC will now close."))
-                        root.quit()
+                        # Trigger EDMC's normal shutdown (onexit) instead of root.quit(), so plugin_stop
+                        # and full cleanup run and the app doesn't hang (see EDMarketConnector.py <<Quit>> binding).
+                        try:
+                            root.event_generate('<<Quit>>')
+                        except tk.TclError:
+                            root.quit()
                     else:
                         # LANG: Shown when update download/install failed
                         showerror(parent_window, plugin_tl("GalaxyGPS Update"), plugin_tl("Update failed. Check the EDMC log for details."))

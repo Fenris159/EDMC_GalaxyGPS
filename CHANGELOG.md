@@ -1,4 +1,5 @@
-<!-- markdownlint-disable MD024 -->
+
+
 # EDMC_GalaxyGPS Changelog
 
 All notable changes to this project will be documented in this file.
@@ -25,6 +26,13 @@ With the rename from SpanshRouter to GalaxyGPS and the significant code evolutio
 
 - **Custom install locations**: Update install uses the plugin path EDMC passes at startup, so it works for custom plugin/EDMC install locations as long as the plugin directory is writable.
 
+### Update process fixes
+
+- **EDMC closes cleanly after update**: After "Update installed. EDMC will now close.", the app now triggers EDMC’s normal shutdown (`<<Quit>>` / `onexit`) instead of only stopping the mainloop, so the window closes without freezing and the update takes effect.
+- **Download URL matches GitHub release tags**: The updater no longer adds a `v` prefix to the release tag; it uses the tag as GitHub has it (e.g. `1.5.1`), so the release asset download no longer returns 404.
+- **Version check uses GitHub Releases API**: The "is an update available?" check now uses `releases/latest` instead of `version.json` on a branch, so it works regardless of default branch name (master vs main) and always reflects the latest published release.
+- **Clearer update logging**: The EDMC log now records the download URL, success, or failure with status code so update issues are easier to diagnose.
+
 ---
 
 ## 1.5.1
@@ -48,7 +56,6 @@ With the rename from SpanshRouter to GalaxyGPS and the significant code evolutio
   - Automatic language detection based on EDMC language setting
   - Dynamic UI refresh when language changes in EDMC settings
   - Complete translation files for all supported languages in `L10n/` directory
-
 - **🚢 Enhanced Fleet Carrier Management**:
   - **Cargo Details Window**: New window displaying detailed cargo manifest for fleet carriers
     - Shows cargo item names (localized), quantities, and values
@@ -70,7 +77,6 @@ With the rename from SpanshRouter to GalaxyGPS and the significant code evolutio
   - Individual translation files for each supported language
   - Proper handling of special characters and placeholders
   - Support for `{CR}` (carriage return) and `{ERROR}` placeholders in error messages
-
 - **Dynamic UI Updates**: All UI elements automatically refresh when language changes
   - Buttons, labels, and placeholders update in real-time
   - Window titles and column headers update when windows are opened
@@ -83,7 +89,6 @@ With the rename from SpanshRouter to GalaxyGPS and the significant code evolutio
   - Window positions are saved and restored between sessions
   - Better handling of window resizing and positioning
   - Improved visual consistency across all windows
-
 - **Better Data Presentation**: Enhanced formatting and display of carrier information
   - Improved handling of missing data indicators
   - Better visual alignment in detail windows
@@ -96,7 +101,6 @@ With the rename from SpanshRouter to GalaxyGPS and the significant code evolutio
   - `StoredShipsManager`: Handles ships data storage and retrieval
   - `StoredModulesManager`: Handles stored modules data for the Modules Details window
   - Improved error handling and data validation
-
 - **Translation File Management**: Organized translation files in `L10n/` directory
   - Template file for reference (`en.template`)
   - Active English translations (`en.strings`)
@@ -139,17 +143,14 @@ With the rename from SpanshRouter to GalaxyGPS and the significant code evolutio
   - Now correctly displays data for the selected carrier from dropdown
   - Simplified data retrieval to match "View All" window behavior
   - Ensures consistency between main UI and detail windows
-
 - **Icy Rings and Pristine Toggle Colors**: Fixed toggle button colors to match EDMC orange theme
   - Toggle circles now display orange when checked (active), gray when unchecked
   - Toggle labels ("Icy Rings" and "Pristine") now display orange when checked, gray when unchecked
   - Improved visual consistency with EDMC color scheme
-
 - **Tritium Search Location**: Fixed Tritium search to use carrier's location instead of player's location
   - Clicking Tritium label now searches near the selected fleet carrier's system
   - More useful when carrier is in a different system than the player
   - Consistent behavior with "Find Trit" button
-
 - **Tritium Search URL Format**: Fixed Inara.cz Tritium search URL to use correct format
   - Changed from `?search=Tritium&nearstarsystem=` to `?pi2=10269&ps1=`
   - Ensures proper search functionality on Inara.cz
@@ -168,12 +169,10 @@ With the rename from SpanshRouter to GalaxyGPS and the significant code evolutio
 - **Fuel Display Rounding**: Fixed "Fuel Used" and "Fuel Left" columns not being rounded to the nearest hundredth in the "View Route" window
   - Now properly rounds up to 2 decimal places, consistent with distance values
   - Applies to all CSV route types that include fuel columns
-
 - **Fleet Carrier Display Errors**: Fixed main UI showing "Error" for System and Balance when data was unavailable
   - Now correctly displays "Unknown" (grayed out) instead of "Error" (red)
   - Improved error handling and null value checking
   - Matches behavior of "View All Carriers" window for consistency
-
 - **Inara Fleet Carrier URL**: Fixed incorrect Inara.cz URL format for fleet carrier lookups
   - Changed from `https://inara.cz/elite/fleetcarrier/?search=` to `https://inara.cz/elite/station/?search=`
   - Fleet carriers are correctly accessed via the station search endpoint
@@ -194,23 +193,19 @@ With the rename from SpanshRouter to GalaxyGPS and the significant code evolutio
   - Makes it easy to locate your position in the route at a glance
   - Highlight automatically updates as you progress through the route
   - Window refreshes dynamically when next waypoint changes (if window is open)
-
 - **EDSM Integration**: Added EDSM buttons to both "View Route" and "View All Carriers" windows
   - "EDSM" button appears before each system name
   - Opens system page on EDSM.net as an alternative to Inara.cz
   - Useful for systems that may not appear on Inara
-
 - **Visual Indicator Improvements**:
   - **Neutron Star Indicator**: Changed from red to light blue dot to distinguish from other indicators
   - **Dot Indicator Alignment**: All dot indicators (Icy Rings, Pristine, Refuel, Neutron Star, etc.) are now center-aligned within their columns
   - Improved visual consistency and readability
-
 - **Automatic Column Width Adjustment**: Columns now automatically resize to fit content
   - Prevents text cutoff for long system names or data values
   - Calculates maximum width needed based on both headers and all data rows
   - Window opens wide enough to display all columns with scrollbars when needed
   - Applies to both "View Route" and "View All Carriers" windows
-
 - **Improved CSV Data Preservation**: Enhanced CSV import to store all data in memory
   - Preserves all columns from original CSV for display in "View Route" window
   - No longer relies on reading original CSV file - all data stored in memory
@@ -224,7 +219,6 @@ With the rename from SpanshRouter to GalaxyGPS and the significant code evolutio
   - Distinguishes between legitimate zero values (displayed as "0") and missing data (displayed as "Needs Update")
   - Helps identify when carrier data needs to be refreshed via CAPI
   - Applies to both main UI display and "View All Carriers" window
-
 - **Enhanced "View All Carriers" Window**:
   - Automatic column width adjustment for optimal display
   - "Needs Update" text properly accounted for in column sizing
@@ -237,7 +231,6 @@ With the rename from SpanshRouter to GalaxyGPS and the significant code evolutio
   - "Cancel" button appears next to "Calculate" to return to default view
   - Button returns to "Plot Route" state after route calculation completes
   - Clearer workflow and user feedback
-
 - **Distance Rounding**: All distance values rounded up to nearest hundredth
   - Prevents underestimating distances
   - Applies to "Distance to Arrival", "Distance Remaining", and "Fuel Used" displays
@@ -248,12 +241,10 @@ With the rename from SpanshRouter to GalaxyGPS and the significant code evolutio
 - **Visual Separators**: Added column separators (grid lines) to detail windows
   - Improves readability and alignment in "View Route" and "View All Carriers" windows
   - Helps align data with column headers
-
 - **Improved Column Alignment**: Perfect alignment between headers and data
   - Refactored to use single grid layout for headers and data rows
   - Text columns left-aligned, numeric columns right-aligned, indicator columns center-aligned
   - Consistent spacing and padding throughout
-
 - **UI Compaction**: Optimized horizontal spacing in main plugin window
   - Reduced gaps between elements while maintaining readability
   - Better organization of route action buttons
@@ -266,12 +257,10 @@ With the rename from SpanshRouter to GalaxyGPS and the significant code evolutio
   - `route_fieldnames` preserves original CSV header names
   - Eliminates file I/O when viewing routes
   - Faster access and more reliable data preservation
-
 - **Route Window Management**: Dynamic window refresh system
   - Route window automatically refreshes when next waypoint changes
   - Window reference tracking for efficient updates
   - Proper cleanup when windows are closed
-
 - **Error Handling**: Enhanced error handling for missing data
   - Proper detection of missing vs. zero values
   - Graceful handling of incomplete carrier data
@@ -287,7 +276,6 @@ With the rename from SpanshRouter to GalaxyGPS and the significant code evolutio
   - Tracks location, fuel (Tritium), balance, cargo, state, theme, docking access, and more
   - Supports multiple carriers and tracks source galaxy (Live/Beta/Legacy)
   - Real-time updates from CAPI and journal event fallback for location, fuel, and cargo changes
-
 - **Fleet Carrier Management UI**: Complete fleet carrier management interface at the top of the plugin window
   - **Dropdown Menu**: Select and track specific fleet carriers with name, callsign, system, and Tritium displayed
   - **View All Window**: Comprehensive window showing all carriers with full details
@@ -301,7 +289,6 @@ With the rename from SpanshRouter to GalaxyGPS and the significant code evolutio
   - **Icy Rings & Pristine Status**: Read-only checkboxes showing ring information for carrier's current system
     - Data fetched from EDSM API and cached in CSV to minimize API calls
     - Updates automatically when carrier location changes
-
 - **Fleet Carrier Route Integration**: Enhanced route features for fleet carrier routes
   - **Tritium Display**: Shows fuel and cargo amounts (e.g., "Tritium: 1000 (In Cargo: 500)")
     - Clickable label to search Inara.cz for nearby Tritium using current system location
@@ -319,13 +306,11 @@ With the rename from SpanshRouter to GalaxyGPS and the significant code evolutio
   - Auto-sizing to fit content with screen width constraints
   - Horizontal and vertical scrollbars when needed
   - Road to Riches routes: System name repetition handled for better readability
-
 - **Intelligent Route Resumption**: Automatically resumes route from current location when reloading CSV
   - For regular routes: Uses player's current system location
   - For fleet carrier routes: Uses selected fleet carrier's current location
   - Searches entire route to find matching system and sets appropriate next waypoint
   - Properly adjusts jump counts when resuming mid-route
-
 - **Fuel Used Display**: Shows "Fuel Used" value in waypoint details area when route CSV includes this column
   - Supports Fleet Carrier, Galaxy, and generic route formats
 
@@ -341,12 +326,10 @@ With the rename from SpanshRouter to GalaxyGPS and the significant code evolutio
   - Determines Icy Rings and Pristine status for fleet carrier locations
   - Caches results in CSV to minimize API calls
   - Only queries when carrier location changes or data is missing
-
 - **Journal Event Handling**: Enhanced journal event processing for fleet carrier updates
   - Handles `CarrierJump`, `CarrierDepositFuel`, `CarrierStats`, `Cargo`, and `Location` events
   - Fallback mechanism when CAPI data is unavailable
   - Real-time updates for fuel, cargo, and location changes
-
 - **CSV Data Management**: Extended fleet carrier CSV to include Icy Rings and Pristine status
   - Preserves cached data when updating from CAPI
   - Invalidates cached ring data when carrier location changes
@@ -487,3 +470,4 @@ With the rename from SpanshRouter to GalaxyGPS and the significant code evolutio
 ## 1.0.0
 
 - Initial release
+
