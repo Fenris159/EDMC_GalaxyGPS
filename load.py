@@ -4,6 +4,7 @@ import os
 import queue
 import sys
 import threading
+import tkinter as tk
 
 # Plugin folder name; must match what plug.py uses for logger setup (PLUGINS.md)
 _plugin_dir = os.path.dirname(os.path.abspath(__file__))
@@ -26,6 +27,7 @@ from GalaxyGPS.ui.message_dialog import showinfo, showwarning, showerror, askyes
 
 from companion import SERVER_LIVE, SERVER_LEGACY, SERVER_BETA  # type: ignore
 from config import appname, config  # type: ignore
+from theme import theme  # type: ignore
 
 logger = logging.getLogger(f'{appname}.{plugin_name}')
 
@@ -273,8 +275,63 @@ def ask_for_update():
         install_update = askyesno(parent_window, "GalaxyGPS", update_txt) if parent_window else False
 
         if install_update:
-            # LANG: Confirmation message after accepting update
-            showinfo(parent_window, "GalaxyGPS", plugin_tl("The update will be installed as soon as you quit EDMC."))
+            # Show status window and run download + install in background; close EDMC when done
+            root = parent_window.winfo_toplevel() if parent_window else None
+            if not root:
+                galaxy_gps.update_available = False
+                return
+            install_queue = queue.Queue()
+            wait_win = tk.Toplevel(root)
+            wait_win.title("GalaxyGPS")
+            wait_win.transient(root)
+            wait_win.resizable(False, False)
+            # Apply EDMC theme to match other plugin dialogs
+            try:
+                _temp = tk.Label(wait_win)
+                theme.update(_temp)
+                _bg, _fg = _temp.cget('bg'), _temp.cget('foreground')
+                _temp.destroy()
+            except Exception:
+                _bg, _fg = '#1e1e1e', 'orange'
+            wait_win.configure(bg=_bg)
+            # LANG: Status text while update is downloading and installing
+            msg = plugin_tl("Downloading and installing update, please wait…")
+            lbl = tk.Label(wait_win, text=msg, padx=24, pady=16, bg=_bg, fg=_fg)
+            lbl.pack()
+            theme.update(lbl)
+            wait_win.update_idletasks()
+            wait_win.geometry(f"+{root.winfo_rootx() + max(0, (root.winfo_width() - wait_win.winfo_reqwidth()) // 2)}"
+                              f"+{root.winfo_rooty() + max(0, (root.winfo_height() - wait_win.winfo_reqheight()) // 2)}")
+
+            def _run_install():
+                try:
+                    galaxy_gps.spansh_updater.install()
+                    install_queue.put(True)
+                except Exception as e:
+                    logger.exception("GalaxyGPS update install failed")
+                    install_queue.put(False)
+
+            threading.Thread(target=_run_install, daemon=True).start()
+
+            def _poll_install():
+                try:
+                    done = install_queue.get_nowait()
+                    try:
+                        wait_win.destroy()
+                    except tk.TclError:
+                        pass
+                    galaxy_gps.update_available = False
+                    if done:
+                        # LANG: Shown after update install, before EDMC is closed
+                        showinfo(parent_window, "GalaxyGPS", plugin_tl("Update installed. EDMC will now close."))
+                        root.quit()
+                    else:
+                        # LANG: Shown when update download/install failed
+                        showerror(parent_window, plugin_tl("GalaxyGPS Update"), plugin_tl("Update failed. Check the EDMC log for details."))
+                except queue.Empty:
+                    root.after(300, _poll_install)
+
+            root.after(300, _poll_install)
         else:
             galaxy_gps.update_available = False
 

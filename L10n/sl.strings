@@ -12,6 +12,18 @@
 /* load.py: Confirmation message after accepting update */
 "The update will be installed as soon as you quit EDMC." = "Posodobitev bo nameščena takoj, ko zaprete EDMC.";
 
+/* load.py: Status text while update is downloading and installing */
+"Downloading and installing update, please wait…" = "Prenos in namestitev posodobitve, počakajte…";
+
+/* load.py: Shown after update install, before EDMC is closed */
+"Update installed. EDMC will now close." = "Posodobitev nameščena. EDMC se bo zdaj zaprl.";
+
+/* load.py: Title for update-failed error dialog */
+"GalaxyGPS Update" = "Posodobitev GalaxyGPS";
+
+/* load.py: Shown when update download/install failed */
+"Update failed. Check the EDMC log for details." = "Posodobitev ni uspela. Za podrobnosti preverite dnevnik EDMC.";
+
 /* load.py: Error dialog title */
 "GalaxyGPS Error" = "Napaka GalaxyGPS";
 

@@ -12,6 +12,18 @@
 /* load.py: Confirmation message after accepting update */
 "The update will be installed as soon as you quit EDMC." = "Atjauninājums tiks instalēts, tiklīdz aizvērsiet EDMC.";
 
+/* load.py: Status text while update is downloading and installing */
+"Downloading and installing update, please wait…" = "Lejupielādē un instalē atjauninājumu, lūdzu, gaidiet…";
+
+/* load.py: Shown after update install, before EDMC is closed */
+"Update installed. EDMC will now close." = "Atjauninājums instalēts. EDMC tagad tiks aizvērts.";
+
+/* load.py: Title for update-failed error dialog */
+"GalaxyGPS Update" = "GalaxyGPS atjauninājums";
+
+/* load.py: Shown when update download/install failed */
+"Update failed. Check the EDMC log for details." = "Atjauninājums neizdevās. Sīkāka informācija EDMC žurnālā.";
+
 /* load.py: Error dialog title */
 "GalaxyGPS Error" = "GalaxyGPS kļūda";
 

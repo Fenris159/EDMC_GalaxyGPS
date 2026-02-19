@@ -12,6 +12,18 @@
 /* load.py: Confirmation message after accepting update */
 "The update will be installed as soon as you quit EDMC." = "A frissítés telepítve lesz, amint kilépsz az EDMC-ből.";
 
+/* load.py: Status text while update is downloading and installing */
+"Downloading and installing update, please wait…" = "Frissítés letöltése és telepítése, kérjük várjon…";
+
+/* load.py: Shown after update install, before EDMC is closed */
+"Update installed. EDMC will now close." = "Frissítés telepítve. Az EDMC most bezáródik.";
+
+/* load.py: Title for update-failed error dialog */
+"GalaxyGPS Update" = "GalaxyGPS frissítés";
+
+/* load.py: Shown when update download/install failed */
+"Update failed. Check the EDMC log for details." = "A frissítés sikertelen. Részletek az EDMC naplójában.";
+
 /* load.py: Error dialog title */
 "GalaxyGPS Error" = "GalaxyGPS hiba";
 

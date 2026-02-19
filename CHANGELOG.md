@@ -9,6 +9,24 @@ With the rename from SpanshRouter to GalaxyGPS and the significant code evolutio
 
 ---
 
+## 1.5.2
+
+### Update flow and reliability
+
+- **Update install in a status window**: When you choose to install an update, a themed "Downloading and installing update, please wait…" window is shown. Download and extract run in the background; when done, a short "Update installed. EDMC will now close." message is shown and EDMC closes so the update takes effect. No more relying on install-at-quit timing.
+- **Updater uses existing zip when present**: If the update zip was already downloaded (e.g. from a previous attempt), the installer only extracts it, so installs complete quickly and reliably.
+- **Themed update dialogs**: The "please wait" status window uses EDMC’s theme (same as other plugin dialogs). Success and error messages already used the themed message dialogs.
+
+### Localization
+
+- **Update strings in all languages**: The four update-related strings (please wait, update installed, update failed, dialog title) are now translated in all 20 supported languages (cs, de, es, fi, fr, hu, it, ja, ko, lv, nl, pl, pt-BR, pt-PT, ru, sl, sr-Latn, sr-Latn-BA, sv-SE, uk, zh-Hans, en).
+
+### Compatibility
+
+- **Custom install locations**: Update install uses the plugin path EDMC passes at startup, so it works for custom plugin/EDMC install locations as long as the plugin directory is writable.
+
+---
+
 ## 1.5.1
 
 ### Bug Fixes

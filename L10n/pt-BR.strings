@@ -12,6 +12,18 @@
 /* load.py: Confirmation message after accepting update */
 "The update will be installed as soon as you quit EDMC." = "A atualização será instalada assim que você sair do EDMC.";
 
+/* load.py: Status text while update is downloading and installing */
+"Downloading and installing update, please wait…" = "Baixando e instalando a atualização, aguarde…";
+
+/* load.py: Shown after update install, before EDMC is closed */
+"Update installed. EDMC will now close." = "Atualização instalada. O EDMC será fechado agora.";
+
+/* load.py: Title for update-failed error dialog */
+"GalaxyGPS Update" = "Atualização do GalaxyGPS";
+
+/* load.py: Shown when update download/install failed */
+"Update failed. Check the EDMC log for details." = "Falha na atualização. Verifique o log do EDMC para detalhes.";
+
 /* load.py: Error dialog title */
 "GalaxyGPS Error" = "Erro do GalaxyGPS";
 

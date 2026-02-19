@@ -46,12 +46,16 @@ class SpanshUpdater():
         return self.zip_downloaded
 
     def install(self):
-        if self.download_zip():
+        # Use existing zip if already downloaded (e.g. pre-downloaded when user clicked Install)
+        zip_ready = os.path.isfile(self.zip_path)
+        if not zip_ready:
+            zip_ready = self.download_zip()
+        if zip_ready:
             try:
                 with zipfile.ZipFile(self.zip_path, 'r') as zip_ref:
                     zip_ref.extractall(self.plugin_dir)
-
                 os.remove(self.zip_path)
+                logger.info("GalaxyGPS update extracted successfully")
             except Exception:
                 logger.warning('!! ' + traceback.format_exc(), exc_info=False)
         else:
