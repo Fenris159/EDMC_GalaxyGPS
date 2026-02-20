@@ -24,6 +24,7 @@ Stability: Stable - Breaking changes will increment major version
 """
 
 import logging
+import os
 from typing import Dict, List, Optional, Any
 from copy import deepcopy
 
@@ -35,7 +36,10 @@ _galaxy_gps_instance = None
 # API version following semantic versioning
 API_VERSION = "1.0.0"
 
-logger = logging.getLogger(f'{appname}.EDMC_GalaxyGPS.api')
+# Use the plugin logger (folder name) so EDMC's filter adds osthreadid/qualname before
+# the record reaches handlers; child loggers can miss the filter and break root formatter.
+_plugin_name = os.path.basename(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+logger = logging.getLogger(f'{appname}.{_plugin_name}')
 
 
 def _get_instance():
