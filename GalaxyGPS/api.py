@@ -19,7 +19,7 @@ Usage from other plugins:
         # GalaxyGPS plugin not installed
         pass
 
-API Version: 1.0.0
+API Version: Mirrors plugin version (version.json). Use get_version() at runtime.
 Stability: Stable - Breaking changes will increment major version
 """
 
@@ -33,8 +33,8 @@ from config import appname  # type: ignore
 # Module-level reference to the GalaxyGPS instance
 _galaxy_gps_instance = None
 
-# API version following semantic versioning
-API_VERSION = "1.0.0"
+# API version: set at registration to match plugin version (version.json)
+API_VERSION = "0.0.0"
 
 # Use the plugin logger (folder name) so EDMC's filter adds osthreadid/qualname before
 # the record reaches handlers; child loggers can miss the filter and break root formatter.
@@ -62,8 +62,10 @@ def register_instance(instance):
     Args:
         instance: The GalaxyGPS instance
     """
-    global _galaxy_gps_instance
+    global _galaxy_gps_instance, API_VERSION
     _galaxy_gps_instance = instance
+    # Mirror main program version (version.json) so API version matches plugin release
+    API_VERSION = str(getattr(instance, 'plugin_version', API_VERSION))
     logger.info(f"[GalaxyGPS API] Registered instance, API version {API_VERSION}")
 
 
@@ -84,10 +86,10 @@ def is_available() -> bool:
 
 def get_version() -> str:
     """
-    Get the API version.
+    Get the API version (same as plugin version from version.json).
     
     Returns:
-        API version string in semantic versioning format (e.g., "1.0.0")
+        API version string in semantic versioning format (e.g., "1.5.3")
     """
     return API_VERSION
 

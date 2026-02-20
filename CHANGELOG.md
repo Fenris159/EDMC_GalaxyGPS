@@ -17,6 +17,10 @@ With the rename from SpanshRouter to GalaxyGPS and the significant code evolutio
 - **Fixed ImportError when used with other plugins (e.g. EDMC-Canonn)**: When the plugin folder was named "EDMC_GalaxyGPS" and another plugin (such as Canonn) was installed, GalaxyGPS could raise `ImportError: cannot import name 'plugin_tl' from 'load'` because Python resolved the global name `load` to the other plugin’s `load.py`. The plugin now follows EDMC PLUGINS.md best practices: the entry-point `load.py` sets the translation function on the GalaxyGPS package before any submodule runs, and package code uses `from GalaxyGPS import _plugin_tl` instead of `from load import plugin_tl`, so the shared name `load` is never used from inside the package. Works correctly with both folder names (GalaxyGPS and EDMC_GalaxyGPS) and with any other plugins installed.
 - **Fixed logging error (osthreadid) when other plugins load after GalaxyGPS**: The public API module (`GalaxyGPS.api`) was using a child logger; when its log records propagated to EDMC's root logger, the formatter expected an `osthreadid` field that is normally added by EDMC's filter on the plugin logger. The API module now uses the same plugin logger (by plugin folder name) so the filter runs first and the "Formatting field not found in record: 'osthreadid'" error no longer occurs.
 
+### API
+
+- **API version mirrors plugin version**: The public API version (`get_version()` and the registered instance log line) now reflects the plugin version from `version.json` instead of a fixed 1.0.0, so other plugins can rely on a single version number.
+
 ---
 
 ## 1.5.2
