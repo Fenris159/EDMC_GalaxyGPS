@@ -14,9 +14,9 @@ GalaxyGPS started as an evolution from SpanshRouter, but has grown into somethin
 - **⛽ Tritium Management**: Never run out of fuel with smart warnings and Inara integration
 - **🔍 Deep Integration**: Seamless connections with EDSM, Inara, and Spansh for all your navigation needs
 
-## Current Version: 1.5.2
+## Current Version: 1.5.3
 
-This release improves the in-plugin updater (status window, reliable download and install, clean EDMC shutdown) and fixes the update process so it works with GitHub Releases. See the [Changelog](CHANGELOG.md) for full details!
+This release fixes an import conflict when GalaxyGPS is used alongside other plugins (e.g. EDMC-Canonn): the plugin no longer relies on the global `load` module from inside the package, so it works correctly regardless of plugin folder name and other installed plugins. See the [Changelog](CHANGELOG.md) for full details!
 
 ---
 

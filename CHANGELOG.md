@@ -10,6 +10,14 @@ With the rename from SpanshRouter to GalaxyGPS and the significant code evolutio
 
 ---
 
+## 1.5.3
+
+### Bug Fixes
+
+- **Fixed ImportError when used with other plugins (e.g. EDMC-Canonn)**: When the plugin folder was named "EDMC_GalaxyGPS" and another plugin (such as Canonn) was installed, GalaxyGPS could raise `ImportError: cannot import name 'plugin_tl' from 'load'` because Python resolved the global name `load` to the other plugin’s `load.py`. The plugin now follows EDMC PLUGINS.md best practices: the entry-point `load.py` sets the translation function on the GalaxyGPS package before any submodule runs, and package code uses `from GalaxyGPS import _plugin_tl` instead of `from load import plugin_tl`, so the shared name `load` is never used from inside the package. Works correctly with both folder names (GalaxyGPS and EDMC_GalaxyGPS) and with any other plugins installed.
+
+---
+
 ## 1.5.2
 
 ### Update flow and reliability

@@ -5,8 +5,8 @@ Custom themed message dialogs matching EDMC style.
 import tkinter as tk
 from theme import theme  # type: ignore
 
-# Import localization function
-from load import plugin_tl
+# Localization: use plugin's tl from package (PLUGINS.md: avoid "from load import" across plugins)
+from GalaxyGPS import _plugin_tl as plugin_tl
 
 
 def show_themed_message(parent, title, message, message_type="info", buttons="ok"):

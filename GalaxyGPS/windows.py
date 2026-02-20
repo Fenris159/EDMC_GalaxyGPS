@@ -14,8 +14,8 @@ from config import appname  # type: ignore
 from theme import theme  # type: ignore
 from ttkHyperlinkLabel import HyperlinkLabel  # type: ignore
 
-# Import localization function from load.py
-from load import plugin_tl  # type: ignore
+# Localization: use plugin's tl from package (PLUGINS.md: avoid "from load import" across plugins)
+from GalaxyGPS import _plugin_tl as plugin_tl  # type: ignore
 
 from .ui_helpers import ThemeSafeCanvas
 from .ui.window_manager import create_themed_window, restore_window_position

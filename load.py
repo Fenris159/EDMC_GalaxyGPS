@@ -1,3 +1,4 @@
+import importlib.util
 import json
 import logging
 import os
@@ -21,6 +22,16 @@ if _plugin_dir not in sys.path:
 import l10n
 import functools
 plugin_tl = functools.partial(l10n.translations.tl, context=__file__)
+
+# PLUGINS.md: "from my_module import foo will only import one module with that name across all
+# plugins." So submodules must not do "from load import plugin_tl" (can resolve to another
+# plugin's load). Bootstrap GalaxyGPS with _plugin_tl set before any submodule runs.
+_spec = importlib.util.find_spec('GalaxyGPS')
+if _spec and _spec.loader:
+    _galaxy_gps_module = importlib.util.module_from_spec(_spec)
+    _galaxy_gps_module._plugin_tl = plugin_tl
+    sys.modules['GalaxyGPS'] = _galaxy_gps_module
+    _spec.loader.exec_module(_galaxy_gps_module)
 
 # Use custom themed message dialogs
 from GalaxyGPS.ui.message_dialog import showinfo, showwarning, showerror, askyesno
@@ -56,14 +67,8 @@ if not logger.hasHandlers():
     _ch.setFormatter(_fmt)
     logger.addHandler(_ch)
 
-# Import GalaxyGPS class - this must work regardless of plugin folder name
-try:
-    from GalaxyGPS import GalaxyGPS
-except ImportError:
-    # If import fails, try to add the plugin directory to sys.path
-    if _plugin_dir not in sys.path:
-        sys.path.insert(0, _plugin_dir)
-    from GalaxyGPS import GalaxyGPS
+# GalaxyGPS package already loaded above with _plugin_tl set
+from GalaxyGPS import GalaxyGPS
 
 galaxy_gps = None
 _update_check_queue = queue.Queue()

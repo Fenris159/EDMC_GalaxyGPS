@@ -24,8 +24,8 @@ from monitor import monitor  # type: ignore
 from ttkHyperlinkLabel import HyperlinkLabel  # type: ignore
 from theme import theme  # type: ignore
 
-# Import localization function from load.py
-from load import plugin_tl  # type: ignore
+# Localization: use plugin's tl from package (PLUGINS.md: avoid "from load import" across plugins)
+from GalaxyGPS import _plugin_tl as plugin_tl  # type: ignore
 
 from . import AutoCompleter, PlaceHolder
 from .updater import SpanshUpdater
